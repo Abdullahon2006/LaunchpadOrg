@@ -5,107 +5,102 @@ struct AppGridView: View {
     @Environment(LayoutStore.self) private var store
     @Environment(DragState.self) private var drag
     let pageIndex: Int
+    /// Paginated grid geometry, supplied by ContentView so the store's page
+    /// size and the visible layout stay in sync with window width.
+    let cols: Int
+    let rows: Int
+    let slotWidth: CGFloat
+    let iconSize: CGFloat
     @Binding var selectedAppID: UUID?
     var onOpenFolder: (AppFolder) -> Void
     var onCreateFolder: (AppFolder) -> Void
 
-    /// Preferred icon slot width. The grid picks a column count that fits
-    /// the available window width closest to this value.
-    private let preferredSlotWidth: CGFloat = 130
-    private let minCols = 5
-    private let maxCols = 12
-    private let sidePadding: CGFloat = 48
-
     var body: some View {
-        GeometryReader { geo in
-            let cols = columnCount(for: geo.size.width)
-            let usable = max(0, geo.size.width - sidePadding * 2)
-            let slot = usable / CGFloat(cols)
-            // Icon size grows with the slot so fullscreen actually uses the
-            // extra space instead of leaving huge margins.
-            let iconSize = min(120, max(64, slot - 42))
-            let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: cols)
-            let nodes = store.pages.indices.contains(pageIndex) ? store.pages[pageIndex] : []
-
-            LazyVGrid(columns: columns, spacing: 24) {
-                ForEach(Array(nodes.enumerated()), id: \.element.id) { index, node in
-                    let here = IndexPath(item: index, section: pageIndex)
-                    nodeView(node, at: here, iconSize: iconSize)
-                        .opacity(drag.source == here ? 0.3 : 1)
-                        .scaleEffect(scaleFor(here))
-                        .animation(.easeOut(duration: 0.15), value: drag.hoverTarget)
-                        .animation(.easeOut(duration: 0.15), value: drag.source)
-                        .animation(.easeOut(duration: 0.2), value: drag.willCreateFolder)
-                        .onDrag {
-                            drag.source = here
-                            // Payload is ignored on the receiving side — DragState
-                            // is the source of truth — but SwiftUI requires a
-                            // non-empty provider to start a drag session.
-                            return NSItemProvider(object: "grid:\(here.section):\(here.item)" as NSString)
-                        }
-                        .onDrop(
-                            of: [UTType.text],
-                            delegate: FastDropDelegate(
-                                store: store,
-                                drag: drag,
-                                target: here,
-                                onCreateFolder: onCreateFolder
-                            )
+        let nodes = store.pages.indices.contains(pageIndex) ? store.pages[pageIndex] : []
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: cols)
+        LazyVGrid(columns: columns, spacing: 18) {
+            ForEach(0 ..< max(nodes.count, cols * rows), id: \.self) { index in
+                let flat = store.flatIndex(page: pageIndex, item: index)
+                let node = index < nodes.count ? nodes[index] : nil
+                slotView(node: node, at: flat, index: index)
+                    .frame(height: iconSize + 28)
+                    .opacity(drag.source == flat ? 0.25 : 1)
+                    .scaleEffect(scaleFor(flat, isEmpty: node == nil))
+                    .animation(.easeOut(duration: 0.15), value: drag.hoverTarget)
+                    .animation(.easeOut(duration: 0.15), value: drag.source)
+                    .animation(.easeOut(duration: 0.2), value: drag.willCreateFolder)
+                    .onDrop(
+                        of: [UTType.text],
+                        delegate: FastDropDelegate(
+                            store: store,
+                            drag: drag,
+                            target: flat,
+                            targetIsEmpty: node == nil,
+                            onCreateFolder: onCreateFolder
                         )
-                }
+                    )
             }
-            .padding(.horizontal, sidePadding)
-            .padding(.vertical, 20)
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
     }
 
-    private func columnCount(for width: CGFloat) -> Int {
-        let raw = Int((width - sidePadding * 2) / preferredSlotWidth)
-        return min(max(raw, minCols), maxCols)
-    }
-
-    private func scaleFor(_ here: IndexPath) -> CGFloat {
-        guard drag.hoverTarget == here, drag.source != here else { return 1 }
-        return drag.willCreateFolder ? 1.12 : 1.04
+    private func scaleFor(_ flat: Int, isEmpty: Bool) -> CGFloat {
+        guard drag.hoverTarget == flat, drag.source != flat else { return 1 }
+        if isEmpty { return 1 }
+        return drag.willCreateFolder ? 1.12 : 1.05
     }
 
     @ViewBuilder
-    private func nodeView(_ node: LayoutNode, at index: IndexPath, iconSize: CGFloat) -> some View {
+    private func slotView(node: LayoutNode?, at flat: Int, index: Int) -> some View {
         switch node {
-        case .app(let id):
+        case .app(let id)?:
             if let app = store.app(for: id) {
                 AppIconView(item: app,
                             iconSize: iconSize,
                             selectedAppID: $selectedAppID)
+                    .onDrag {
+                        drag.source = flat
+                        return NSItemProvider(object: "grid:\(flat)" as NSString)
+                    }
             }
-        case .folder(let folder):
+        case .folder(let folder)?:
             FolderIconView(
                 folder: folder,
                 apps: store.apps(in: folder),
                 iconSize: iconSize,
-                isDropTarget: drag.hoverTarget == index && drag.source != index
+                isDropTarget: drag.hoverTarget == flat && drag.source != flat
             )
-            .onTapGesture { onOpenFolder(folder) } // single click opens folder
+            .onTapGesture { onOpenFolder(folder) }
+            .onDrag {
+                drag.source = flat
+                return NSItemProvider(object: "grid:\(flat)" as NSString)
+            }
+        case nil:
+            // Empty slot — invisible, but must be a real frame so it's
+            // droppable and occupies a grid cell. No drag handler.
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
         }
     }
 }
 
-/// Drop delegate driven by `DragState`.
-///
-/// Behavior matrix at drop time:
-///  • target is a folder             → add source app to that folder
-///  • target is an app, dwell ≥0.5s  → create a new folder around the two
-///  • target is an app otherwise     → reorder (source takes target slot)
+/// Drop delegate — all drop logic goes through `DragState`, so reads of the
+/// source happen synchronously in `performDrop`.
 struct FastDropDelegate: DropDelegate {
     let store: LayoutStore
     let drag: DragState
-    let target: IndexPath
+    let target: Int
+    let targetIsEmpty: Bool
     let onCreateFolder: (AppFolder) -> Void
 
     func dropEntered(info: DropInfo) {
         drag.hoverTarget = target
         drag.willCreateFolder = false
-        // Promote to folder-create mode if the user lingers on the same icon.
+        // Only arm folder-create on non-empty targets — you can't merge
+        // an app with empty space.
+        guard !targetIsEmpty else { return }
         drag.scheduleDwell(0.5) {
             drag.willCreateFolder = true
         }
@@ -125,30 +120,28 @@ struct FastDropDelegate: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         let source = drag.source
-        let willCreateFolder = drag.willCreateFolder
+        let wantsFolder = drag.willCreateFolder
         defer { drag.clear() }
+        guard let source, source != target else { return false }
 
-        guard let source,
-              source != target,
-              store.pages.indices.contains(target.section),
-              store.pages[target.section].indices.contains(target.item) else {
-            return false
-        }
-
-        let targetNode = store.pages[target.section][target.item]
+        // Need to know what's *at* the target in the live store.
+        let (page, item) = (target / store.pageSize, target % store.pageSize)
+        let targetNode: LayoutNode? = {
+            guard store.pages.indices.contains(page),
+                  store.pages[page].indices.contains(item) else { return nil }
+            return store.pages[page][item]
+        }()
 
         switch targetNode {
-        case .folder:
-            store.dropOnto(source: source, target: target)
-        case .app:
-            if willCreateFolder {
-                let newFolder = store.dropOnto(source: source, target: target)
-                if let newFolder {
-                    DispatchQueue.main.async { onCreateFolder(newFolder) }
-                }
-            } else {
-                store.move(from: source, to: target)
+        case .folder?:
+            store.mergeOnto(source: source, target: target)
+        case .app? where wantsFolder:
+            if let newFolder = store.mergeOnto(source: source, target: target) {
+                DispatchQueue.main.async { onCreateFolder(newFolder) }
             }
+        case .app?, nil:
+            // Default: swap slots. Empty-slot drop = "move to empty".
+            store.swap(from: source, to: target)
         }
         return true
     }
@@ -161,7 +154,7 @@ struct SearchResultsGrid: View {
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 24) {
+            LazyVGrid(columns: columns, spacing: 20) {
                 ForEach(results) { app in
                     AppIconView(item: app, selectedAppID: $selectedAppID)
                 }

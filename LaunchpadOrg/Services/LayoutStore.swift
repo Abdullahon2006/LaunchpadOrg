@@ -2,24 +2,46 @@ import Foundation
 import Observation
 import AppKit
 
+/// Ordered, sparse slot-based layout store.
+///
+/// Layout model:
+///   • A single flat list of slots, each one either an app, a folder, or nil.
+///     nil slots are preserved — this is how "free placement with gaps" works.
+///   • The grid view asks for a paginated projection (`pages`) based on the
+///     current screen-derived page size. Changing page size reflows the flat
+///     list without mutating it, so the user's relative order survives window
+///     resizes / fullscreen toggles.
+///   • Mutations are flat-index based (Int), so dragging across pages is just
+///     a swap between two flat indices. No IndexPath juggling.
 @Observable
 final class LayoutStore {
-    /// All apps discovered on disk, keyed by ID for fast lookup.
     private(set) var apps: [UUID: AppItem] = [:]
 
-    /// User-arranged layout: pages of nodes (apps or folders).
-    var pages: [[LayoutNode]] = []
+    /// Paginated view of `flatSlots`. Each page has exactly `pageSize` slots,
+    /// padded with trailing nils on the last page.
+    private(set) var pages: [[LayoutNode?]] = []
 
-    /// Lowercased names for fast search (avoid lowercasing every keystroke).
-    @ObservationIgnored private var searchIndex: [(id: UUID, name: String, lowered: String)] = []
+    /// How many slots fit per visible page. ContentView sets this from the
+    /// GeometryReader-derived (cols × rows) so the grid fills the window.
+    var pageSize: Int = 35 {
+        didSet { if oldValue != pageSize { paginateFromFlat(flatSlots) } }
+    }
 
-    /// Cached icons keyed by app ID — NSWorkspace.icon(forFile:) is expensive to call per redraw.
+    /// Ground truth: the user's full layout as a single ordered list of
+    /// optional slots. nil = empty slot.
+    @ObservationIgnored private var flatSlots: [LayoutNode?] = []
+
+    @ObservationIgnored private var searchIndex: [(id: UUID, lowered: String)] = []
     @ObservationIgnored private var iconCache: [UUID: NSImage] = [:]
 
-    private let defaultsKey = "LaunchpadOrg.layout.v1"
-    private let pageSize = 35 // 7 columns x 5 rows
+    private let defaultsKey = "LaunchpadOrg.layout.v2"
 
-    /// Returns a cached icon for the given app, loading it lazily on first access.
+    init() {
+        reload()
+    }
+
+    // MARK: Lookups
+
     func icon(for item: AppItem) -> NSImage {
         if let cached = iconCache[item.id] { return cached }
         let img = NSWorkspace.shared.icon(forFile: item.bundleURL.path)
@@ -27,199 +49,11 @@ final class LayoutStore {
         return img
     }
 
-    init() {
-        reload()
-    }
-
-    /// Rescan /Applications and merge with persisted layout.
-    func reload() {
-        let scanned = AppScanner.scan()
-        // Preserve stable IDs by URL across launches.
-        let persisted = loadPersisted()
-
-        var urlToID: [URL: UUID] = [:]
-        for item in persisted.apps.values {
-            urlToID[item.bundleURL.standardizedFileURL] = item.id
-        }
-
-        var freshApps: [UUID: AppItem] = [:]
-        var remappedScanned: [AppItem] = []
-        for item in scanned {
-            let key = item.bundleURL.standardizedFileURL
-            let id = urlToID[key] ?? item.id
-            let final = AppItem(id: id, name: item.name, bundleURL: item.bundleURL)
-            freshApps[id] = final
-            remappedScanned.append(final)
-        }
-        self.apps = freshApps
-        // Drop cached icons for apps that no longer exist.
-        iconCache = iconCache.filter { freshApps[$0.key] != nil }
-        // Rebuild search index.
-        searchIndex = freshApps.values
-            .map { (id: $0.id, name: $0.name, lowered: $0.name.lowercased()) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-
-        // Rebuild pages: keep persisted order where apps still exist, append new ones.
-        var placedIDs = Set<UUID>()
-        var rebuiltPages: [[LayoutNode]] = []
-        for page in persisted.pages {
-            var newPage: [LayoutNode] = []
-            for node in page {
-                switch node {
-                case .app(let id):
-                    if freshApps[id] != nil {
-                        newPage.append(.app(id))
-                        placedIDs.insert(id)
-                    }
-                case .folder(var folder):
-                    folder.appIDs = folder.appIDs.filter { freshApps[$0] != nil }
-                    placedIDs.formUnion(folder.appIDs)
-                    if !folder.appIDs.isEmpty {
-                        newPage.append(.folder(folder))
-                    }
-                }
-            }
-            if !newPage.isEmpty { rebuiltPages.append(newPage) }
-        }
-
-        // Append apps not yet placed.
-        var leftovers: [LayoutNode] = remappedScanned
-            .filter { !placedIDs.contains($0.id) }
-            .map { .app($0.id) }
-
-        if rebuiltPages.isEmpty, leftovers.isEmpty {
-            rebuiltPages = [[]]
-        }
-
-        while !leftovers.isEmpty {
-            if rebuiltPages.isEmpty { rebuiltPages.append([]) }
-            let lastIdx = rebuiltPages.count - 1
-            let space = pageSize - rebuiltPages[lastIdx].count
-            if space <= 0 {
-                rebuiltPages.append([])
-                continue
-            }
-            let take = min(space, leftovers.count)
-            rebuiltPages[lastIdx].append(contentsOf: leftovers.prefix(take))
-            leftovers.removeFirst(take)
-        }
-
-        self.pages = rebuiltPages
-        save()
-    }
-
-    // MARK: Persistence
-
-    private struct Persisted: Codable {
-        var apps: [UUID: AppItem]
-        var pages: [[LayoutNode]]
-    }
-
-    private func loadPersisted() -> Persisted {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
-              let decoded = try? JSONDecoder().decode(Persisted.self, from: data)
-        else {
-            return Persisted(apps: [:], pages: [])
-        }
-        return decoded
-    }
-
-    func save() {
-        let snapshot = Persisted(apps: apps, pages: pages)
-        if let data = try? JSONEncoder().encode(snapshot) {
-            UserDefaults.standard.set(data, forKey: defaultsKey)
-        }
-    }
-
-    // MARK: Mutations
-
-    /// Move a node from one location to another. Source/target use (pageIndex, nodeIndex).
-    func move(from source: IndexPath, to destination: IndexPath) {
-        guard source != destination,
-              pages.indices.contains(source.section),
-              pages[source.section].indices.contains(source.item) else { return }
-        let node = pages[source.section].remove(at: source.item)
-        var destPage = destination.section
-        var destItem = destination.item
-        if destPage >= pages.count { destPage = pages.count - 1; destItem = pages[destPage].count }
-        if source.section == destPage, destItem > pages[destPage].count {
-            destItem = pages[destPage].count
-        }
-        pages[destPage].insert(node, at: min(destItem, pages[destPage].count))
-        save()
-    }
-
-    /// Drop node `source` onto node at `target`. If both are apps, create a folder. If target is a folder, add to it.
-    /// Returns the newly-created folder when a folder is created (so the UI can auto-open it), otherwise `nil`.
-    @discardableResult
-    func dropOnto(source: IndexPath, target: IndexPath) -> AppFolder? {
-        guard source != target,
-              pages.indices.contains(source.section),
-              pages[source.section].indices.contains(source.item),
-              pages.indices.contains(target.section),
-              pages[target.section].indices.contains(target.item) else { return nil }
-
-        let sourceNode = pages[source.section][source.item]
-        let targetNode = pages[target.section][target.item]
-
-        switch (sourceNode, targetNode) {
-        case (.app(let srcID), .app(let tgtID)):
-            // Create a new folder containing both.
-            let folder = AppFolder(name: "Untitled", appIDs: [tgtID, srcID])
-            pages[target.section][target.item] = .folder(folder)
-            pages[source.section].remove(at: source.item)
-            save()
-            return folder
-        case (.app(let srcID), .folder(var folder)):
-            if !folder.appIDs.contains(srcID) { folder.appIDs.append(srcID) }
-            pages[target.section][target.item] = .folder(folder)
-            pages[source.section].remove(at: source.item)
-            save()
-            return nil
-        default:
-            // Fallback: just reorder.
-            move(from: source, to: target)
-            return nil
-        }
-    }
-
-    func renameFolder(id: UUID, to newName: String) {
-        for (p, page) in pages.enumerated() {
-            for (i, node) in page.enumerated() {
-                if case .folder(var folder) = node, folder.id == id {
-                    folder.name = newName
-                    pages[p][i] = .folder(folder)
-                    save()
-                    return
-                }
-            }
-        }
-    }
-
-    func removeAppFromFolder(folderID: UUID, appID: UUID) {
-        for (p, page) in pages.enumerated() {
-            for (i, node) in page.enumerated() {
-                if case .folder(var folder) = node, folder.id == folderID {
-                    folder.appIDs.removeAll { $0 == appID }
-                    if folder.appIDs.isEmpty {
-                        pages[p].remove(at: i)
-                    } else {
-                        pages[p][i] = .folder(folder)
-                    }
-                    // Re-add the app at end of the same page.
-                    if !folder.appIDs.contains(appID) {
-                        pages[p].append(.app(appID))
-                    }
-                    save()
-                    return
-                }
-            }
-        }
-    }
-
-    // MARK: Queries
-
     func app(for id: UUID) -> AppItem? { apps[id] }
+
+    func apps(in folder: AppFolder) -> [AppItem] {
+        folder.appIDs.compactMap { apps[$0] }
+    }
 
     func search(_ query: String) -> [AppItem] {
         guard !query.isEmpty else { return [] }
@@ -229,8 +63,199 @@ final class LayoutStore {
             .compactMap { apps[$0.id] }
     }
 
-    /// Apps resolved for a folder, in the order stored.
-    func apps(in folder: AppFolder) -> [AppItem] {
-        folder.appIDs.compactMap { apps[$0] }
+    // MARK: Flat ↔ Paginated bridge
+
+    /// Flatten `pages` back to a single slot list. Trailing nils trimmed.
+    private func flattenPages() -> [LayoutNode?] {
+        var flat: [LayoutNode?] = pages.flatMap { $0 }
+        while flat.last == .some(nil) || (flat.last.flatMap { $0 } == nil && !flat.isEmpty) {
+            if flat.last == nil { break }      // outer Optional (no elements)
+            if flat.last! == nil { flat.removeLast() } else { break }
+        }
+        return flat
+    }
+
+    private func paginateFromFlat(_ flat: [LayoutNode?]) {
+        flatSlots = flat
+        var rebuilt: [[LayoutNode?]] = []
+        var idx = 0
+        let size = max(pageSize, 1)
+        while idx < flat.count {
+            let end = min(idx + size, flat.count)
+            var page = Array(flat[idx ..< end])
+            while page.count < size { page.append(nil) }
+            rebuilt.append(page)
+            idx = end
+        }
+        if rebuilt.isEmpty {
+            rebuilt = [Array(repeating: nil, count: size)]
+        }
+        self.pages = rebuilt
+    }
+
+    /// Convert a (page, index) pair to a flat index in `flatSlots`.
+    func flatIndex(page: Int, item: Int) -> Int { page * pageSize + item }
+
+    // MARK: Mutations (flat-index based)
+
+    /// Swap the contents of two flat slots. No shifting: everything else
+    /// stays put. This is the primitive behind "drop on icon = reorder"
+    /// and "drop on empty slot = move there".
+    func swap(from source: Int, to target: Int) {
+        guard source != target else { return }
+        var flat = flatSlots
+        let bound = max(source, target)
+        while flat.count <= bound { flat.append(nil) }
+        let a = flat[source]
+        let b = flat[target]
+        flat[source] = b
+        flat[target] = a
+        paginateFromFlat(flat)
+        save()
+    }
+
+    /// Drop source onto target with folder-creation semantics.
+    ///  • source is app / target is folder → add app to folder, blank source.
+    ///  • source is app / target is app    → create new folder from both.
+    ///  • otherwise → noop (caller should fall back to `swap`).
+    @discardableResult
+    func mergeOnto(source: Int, target: Int) -> AppFolder? {
+        guard source != target else { return nil }
+        var flat = flatSlots
+        let bound = max(source, target)
+        while flat.count <= bound { flat.append(nil) }
+        guard case let .app(srcID)? = flat[source] else { return nil }
+        switch flat[target] {
+        case .folder(var folder)?:
+            if !folder.appIDs.contains(srcID) { folder.appIDs.append(srcID) }
+            flat[target] = .folder(folder)
+            flat[source] = nil
+            paginateFromFlat(flat)
+            save()
+            return nil
+        case .app(let tgtID)?:
+            let folder = AppFolder(name: "Untitled", appIDs: [tgtID, srcID])
+            flat[target] = .folder(folder)
+            flat[source] = nil
+            paginateFromFlat(flat)
+            save()
+            return folder
+        case nil:
+            return nil
+        }
+    }
+
+    func renameFolder(id: UUID, to name: String) {
+        var flat = flatSlots
+        for i in flat.indices {
+            if case .folder(var f)? = flat[i], f.id == id {
+                f.name = name
+                flat[i] = .folder(f)
+                break
+            }
+        }
+        paginateFromFlat(flat)
+        save()
+    }
+
+    /// Remove an app from a folder and put it back on the grid (first empty
+    /// slot, or at the end if none is available).
+    func removeAppFromFolder(folderID: UUID, appID: UUID) {
+        var flat = flatSlots
+        var found = false
+        for i in flat.indices {
+            if case .folder(var f)? = flat[i], f.id == folderID {
+                f.appIDs.removeAll { $0 == appID }
+                flat[i] = f.appIDs.isEmpty ? nil : .folder(f)
+                found = true
+                break
+            }
+        }
+        guard found else { return }
+        if let empty = flat.firstIndex(where: { $0 == nil }) {
+            flat[empty] = .app(appID)
+        } else {
+            flat.append(.app(appID))
+        }
+        paginateFromFlat(flat)
+        save()
+    }
+
+    // MARK: Reload + persistence
+
+    private struct Persisted: Codable {
+        var apps: [UUID: AppItem]
+        var flat: [LayoutNode?]
+    }
+
+    private func loadPersisted() -> Persisted {
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+              let decoded = try? JSONDecoder().decode(Persisted.self, from: data) else {
+            return Persisted(apps: [:], flat: [])
+        }
+        return decoded
+    }
+
+    func save() {
+        let snapshot = Persisted(apps: apps, flat: flatSlots)
+        if let data = try? JSONEncoder().encode(snapshot) {
+            UserDefaults.standard.set(data, forKey: defaultsKey)
+        }
+    }
+
+    func reload() {
+        let scanned = AppScanner.scan()
+        let persisted = loadPersisted()
+
+        var urlToID: [URL: UUID] = [:]
+        for item in persisted.apps.values {
+            urlToID[item.bundleURL.standardizedFileURL] = item.id
+        }
+
+        var freshApps: [UUID: AppItem] = [:]
+        for item in scanned {
+            let key = item.bundleURL.standardizedFileURL
+            let id = urlToID[key] ?? item.id
+            freshApps[id] = AppItem(id: id, name: item.name, bundleURL: item.bundleURL)
+        }
+        self.apps = freshApps
+        iconCache = iconCache.filter { freshApps[$0.key] != nil }
+        searchIndex = freshApps.values
+            .map { (id: $0.id, lowered: $0.name.lowercased()) }
+
+        // Restore persisted positions, preserving nil slots.
+        var placed = Set<UUID>()
+        var flat: [LayoutNode?] = persisted.flat.map { slot in
+            switch slot {
+            case .app(let id)?:
+                if freshApps[id] != nil {
+                    placed.insert(id)
+                    return .app(id)
+                }
+                return nil
+            case .folder(var f)?:
+                f.appIDs = f.appIDs.filter { freshApps[$0] != nil }
+                if f.appIDs.isEmpty { return nil }
+                placed.formUnion(f.appIDs)
+                return .folder(f)
+            case nil:
+                return nil
+            }
+        }
+
+        // Place new apps alphabetically in the first available empty slot.
+        let newcomers = freshApps.values
+            .filter { !placed.contains($0.id) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        for app in newcomers {
+            if let empty = flat.firstIndex(where: { $0 == nil }) {
+                flat[empty] = .app(app.id)
+            } else {
+                flat.append(.app(app.id))
+            }
+        }
+
+        paginateFromFlat(flat)
+        save()
     }
 }

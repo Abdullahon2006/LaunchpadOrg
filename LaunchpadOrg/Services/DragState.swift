@@ -1,32 +1,32 @@
 import Foundation
 import Observation
 
-/// Shared drag state so the drop handler can read the source synchronously
-/// instead of awaiting an `NSItemProvider.loadItem` callback.
+/// Shared drag state — read synchronously by drop handlers so we don't pay
+/// the cost of an NSItemProvider round-trip.
 ///
-/// The drop model:
-///   - drop on a folder  → always adds the app to the folder
-///   - drop on an app after dwelling ≥ 0.5 s → create a new folder
-///   - drop on an app otherwise → reorder (source takes target's slot)
+/// Drop model:
+///   • drop on folder slot              → add app to folder (source becomes empty)
+///   • drop on app slot after ≥0.5 s    → create new folder from both
+///   • drop on app slot otherwise       → swap the two slots
+///   • drop on nil slot                 → swap (source moves there)
 @Observable
 final class DragState {
-    /// Source of the in-flight grid drag — (pageIndex, nodeIndex).
-    var source: IndexPath?
+    /// Flat slot index the user is dragging from.
+    var source: Int?
 
-    /// Slot the pointer is currently over.
-    var hoverTarget: IndexPath?
+    /// Flat slot index currently under the pointer.
+    var hoverTarget: Int?
 
-    /// Promoted to `true` after `source` has hovered the same `hoverTarget`
-    /// long enough to mean "merge into folder" rather than "reorder".
+    /// Promoted to true once the pointer has dwelt on the same target long
+    /// enough that a drop should create a folder instead of reordering.
     var willCreateFolder: Bool = false
 
-    /// An app currently being dragged out of an open folder sheet (separate
-    /// from `source`, which is only for the main grid).
+    /// App currently being dragged out of an open folder panel (decoupled
+    /// from grid drags).
     var draggingOutOfFolder: UUID?
 
     @ObservationIgnored private var dwellTimer: DispatchWorkItem?
 
-    /// Schedule a work item to run after `seconds`; cancels any prior dwell.
     func scheduleDwell(_ seconds: TimeInterval, action: @escaping () -> Void) {
         dwellTimer?.cancel()
         let work = DispatchWorkItem(block: action)
