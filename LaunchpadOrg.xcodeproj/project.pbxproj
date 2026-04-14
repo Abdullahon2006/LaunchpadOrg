@@ -19,6 +19,7 @@
 		B0100010000000000000010 /* FolderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100010000000000000010 /* FolderView.swift */; };
 		B0100011000000000000011 /* SearchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100011000000000000011 /* SearchBar.swift */; };
 		B0100012000000000000012 /* GestureMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100012000000000000012 /* GestureMonitor.swift */; };
+		B0100013000000000000013 /* DragState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100013000000000000013 /* DragState.swift */; };
 		B0100020000000000000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A0100020000000000000020 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -36,6 +37,7 @@
 		A0100010000000000000010 /* FolderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderView.swift; sourceTree = "<group>"; };
 		A0100011000000000000011 /* SearchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBar.swift; sourceTree = "<group>"; };
 		A0100012000000000000012 /* GestureMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureMonitor.swift; sourceTree = "<group>"; };
+		A0100013000000000000013 /* DragState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragState.swift; sourceTree = "<group>"; };
 		A0100020000000000000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A0100021000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A0100022000000000000022 /* LaunchpadOrg.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LaunchpadOrg.entitlements; sourceTree = "<group>"; };
@@ -91,6 +93,7 @@
 				A0100006000000000000006 /* AppLauncher.swift */,
 				A0100007000000000000007 /* LayoutStore.swift */,
 				A0100012000000000000012 /* GestureMonitor.swift */,
+				A0100013000000000000013 /* DragState.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -195,6 +198,7 @@
 				B0100010000000000000010 /* FolderView.swift in Sources */,
 				B0100011000000000000011 /* SearchBar.swift in Sources */,
 				B0100012000000000000012 /* GestureMonitor.swift in Sources */,
+				B0100013000000000000013 /* DragState.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

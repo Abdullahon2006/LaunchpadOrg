@@ -150,12 +150,14 @@ final class LayoutStore {
     }
 
     /// Drop node `source` onto node at `target`. If both are apps, create a folder. If target is a folder, add to it.
-    func dropOnto(source: IndexPath, target: IndexPath) {
+    /// Returns the newly-created folder when a folder is created (so the UI can auto-open it), otherwise `nil`.
+    @discardableResult
+    func dropOnto(source: IndexPath, target: IndexPath) -> AppFolder? {
         guard source != target,
               pages.indices.contains(source.section),
               pages[source.section].indices.contains(source.item),
               pages.indices.contains(target.section),
-              pages[target.section].indices.contains(target.item) else { return }
+              pages[target.section].indices.contains(target.item) else { return nil }
 
         let sourceNode = pages[source.section][source.item]
         let targetNode = pages[target.section][target.item]
@@ -163,19 +165,22 @@ final class LayoutStore {
         switch (sourceNode, targetNode) {
         case (.app(let srcID), .app(let tgtID)):
             // Create a new folder containing both.
-            let folder = AppFolder(name: "New Folder", appIDs: [tgtID, srcID])
+            let folder = AppFolder(name: "Untitled", appIDs: [tgtID, srcID])
             pages[target.section][target.item] = .folder(folder)
             pages[source.section].remove(at: source.item)
+            save()
+            return folder
         case (.app(let srcID), .folder(var folder)):
             if !folder.appIDs.contains(srcID) { folder.appIDs.append(srcID) }
             pages[target.section][target.item] = .folder(folder)
             pages[source.section].remove(at: source.item)
+            save()
+            return nil
         default:
             // Fallback: just reorder.
             move(from: source, to: target)
-            return
+            return nil
         }
-        save()
     }
 
     func renameFolder(id: UUID, to newName: String) {

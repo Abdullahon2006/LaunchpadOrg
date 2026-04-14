@@ -3,9 +3,13 @@ import AppKit
 
 struct ContentView: View {
     @Environment(LayoutStore.self) private var store
+    @Environment(DragState.self) private var drag
     @State private var query: String = ""
     @State private var selectedPage: Int = 0
     @State private var openFolder: AppFolder?
+    /// Set when a folder is newly created by a drop — forwards to
+    /// FolderDetailView so it autofocuses the name TextField.
+    @State private var newlyCreatedFolderID: UUID?
     @State private var selectedAppID: UUID?
 
     var body: some View {
@@ -55,19 +59,20 @@ struct ContentView: View {
                 }
             }
         }
-        .onTapGesture {
-            // Click on empty background clears selection.
-            selectedAppID = nil
-        }
+        .onTapGesture { selectedAppID = nil }
         .sheet(item: $openFolder) { folder in
             FolderDetailView(
                 folder: folder,
                 apps: store.apps(in: folder),
                 selectedAppID: $selectedAppID,
+                autoFocusName: folder.id == newlyCreatedFolderID,
                 onRename: { newName in
                     store.renameFolder(id: folder.id, to: newName)
                 },
-                onClose: { openFolder = nil }
+                onClose: {
+                    openFolder = nil
+                    newlyCreatedFolderID = nil
+                }
             )
             .environment(store)
         }
@@ -82,9 +87,8 @@ struct ContentView: View {
         .ignoresSafeArea()
     }
 
-    /// Custom offset-based pager. Lighter than TabView — only the active page's
-    /// grid is in the live layout, and the slide animation is a single offset
-    /// interpolation instead of TabView's full cross-fade.
+    /// Custom offset-based pager. Only one page's grid is rendered in the
+    /// visible viewport; off-screen pages are clipped but still laid out.
     private func pagedGrid(width: CGFloat) -> some View {
         let pageCount = max(store.pages.count, 1)
         let clamped = min(max(selectedPage, 0), pageCount - 1)
@@ -93,7 +97,11 @@ struct ContentView: View {
                 AppGridView(
                     pageIndex: idx,
                     selectedAppID: $selectedAppID,
-                    onOpenFolder: { openFolder = $0 }
+                    onOpenFolder: { openFolder = $0 },
+                    onCreateFolder: { folder in
+                        newlyCreatedFolderID = folder.id
+                        openFolder = folder
+                    }
                 )
                 .frame(width: width)
             }

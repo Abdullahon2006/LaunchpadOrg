@@ -3,11 +3,13 @@ import SwiftUI
 @main
 struct LaunchpadOrgApp: App {
     @State private var layoutStore = LayoutStore()
+    @State private var dragState = DragState()
 
     var body: some Scene {
         WindowGroup("LaunchpadOrg") {
             ContentView()
                 .environment(layoutStore)
+                .environment(dragState)
                 .frame(minWidth: 900, minHeight: 650)
                 .background(WindowAccessor())
         }
