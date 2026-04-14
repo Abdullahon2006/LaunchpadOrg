@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     @Environment(LayoutStore.self) private var store
@@ -9,6 +10,32 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             background
+
+            // Invisible overlay that captures trackpad scroll + pinch.
+            TrackpadGestureView(
+                onSwipePage: { direction in
+                    guard query.isEmpty else { return }
+                    let target = selectedPage + direction
+                    if store.pages.indices.contains(target) {
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            selectedPage = target
+                        }
+                    }
+                },
+                onPinch: { magnification in
+                    // Pinch-in (negative) exits fullscreen — matches native Launchpad.
+                    if magnification < -0.15 {
+                        NSApp.keyWindow?.toggleFullScreen(nil)
+                    } else if magnification > 0.25 {
+                        // Pinch-out enters fullscreen if not already.
+                        if let w = NSApp.keyWindow,
+                           !w.styleMask.contains(.fullScreen) {
+                            w.toggleFullScreen(nil)
+                        }
+                    }
+                }
+            )
+            .allowsHitTesting(true)
 
             VStack(spacing: 0) {
                 HStack {
@@ -35,7 +62,7 @@ struct ContentView: View {
         .sheet(item: $openFolder) { folder in
             FolderDetailView(
                 folder: folder,
-                apps: folder.appIDs.compactMap { store.app(for: $0) },
+                apps: store.apps(in: folder),
                 onRename: { newName in
                     store.renameFolder(id: folder.id, to: newName)
                 },

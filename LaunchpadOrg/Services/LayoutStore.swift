@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import AppKit
 
 @Observable
 final class LayoutStore {
@@ -9,8 +10,22 @@ final class LayoutStore {
     /// User-arranged layout: pages of nodes (apps or folders).
     var pages: [[LayoutNode]] = []
 
+    /// Lowercased names for fast search (avoid lowercasing every keystroke).
+    @ObservationIgnored private var searchIndex: [(id: UUID, name: String, lowered: String)] = []
+
+    /// Cached icons keyed by app ID — NSWorkspace.icon(forFile:) is expensive to call per redraw.
+    @ObservationIgnored private var iconCache: [UUID: NSImage] = [:]
+
     private let defaultsKey = "LaunchpadOrg.layout.v1"
     private let pageSize = 35 // 7 columns x 5 rows
+
+    /// Returns a cached icon for the given app, loading it lazily on first access.
+    func icon(for item: AppItem) -> NSImage {
+        if let cached = iconCache[item.id] { return cached }
+        let img = NSWorkspace.shared.icon(forFile: item.bundleURL.path)
+        iconCache[item.id] = img
+        return img
+    }
 
     init() {
         reload()
@@ -37,6 +52,12 @@ final class LayoutStore {
             remappedScanned.append(final)
         }
         self.apps = freshApps
+        // Drop cached icons for apps that no longer exist.
+        iconCache = iconCache.filter { freshApps[$0.key] != nil }
+        // Rebuild search index.
+        searchIndex = freshApps.values
+            .map { (id: $0.id, name: $0.name, lowered: $0.name.lowercased()) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         // Rebuild pages: keep persisted order where apps still exist, append new ones.
         var placedIDs = Set<UUID>()
@@ -198,8 +219,13 @@ final class LayoutStore {
     func search(_ query: String) -> [AppItem] {
         guard !query.isEmpty else { return [] }
         let q = query.lowercased()
-        return apps.values
-            .filter { $0.name.lowercased().contains(q) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return searchIndex
+            .filter { $0.lowered.contains(q) }
+            .compactMap { apps[$0.id] }
+    }
+
+    /// Apps resolved for a folder, in the order stored.
+    func apps(in folder: AppFolder) -> [AppItem] {
+        folder.appIDs.compactMap { apps[$0] }
     }
 }

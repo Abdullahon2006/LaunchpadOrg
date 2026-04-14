@@ -2,12 +2,13 @@ import SwiftUI
 import AppKit
 
 struct AppIconView: View {
+    @Environment(LayoutStore.self) private var store
     let item: AppItem
     var iconSize: CGFloat = 88
 
     var body: some View {
         VStack(spacing: 6) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: item.bundleURL.path))
+            Image(nsImage: store.icon(for: item))
                 .resizable()
                 .interpolation(.high)
                 .frame(width: iconSize, height: iconSize)

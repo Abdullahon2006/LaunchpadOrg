@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 struct FolderIconView: View {
+    @Environment(LayoutStore.self) private var store
     let folder: AppFolder
     let apps: [AppItem]
     var iconSize: CGFloat = 88
@@ -20,7 +21,7 @@ struct FolderIconView: View {
                 let mini = min(iconSize / 3.5, 22)
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(mini), spacing: 4), count: 3), spacing: 4) {
                     ForEach(Array(apps.prefix(9).enumerated()), id: \.offset) { _, app in
-                        Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
+                        Image(nsImage: store.icon(for: app))
                             .resizable()
                             .frame(width: mini, height: mini)
                     }

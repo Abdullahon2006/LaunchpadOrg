@@ -37,8 +37,7 @@ struct AppGridView: View {
                 AppIconView(item: app)
             }
         case .folder(let folder):
-            let apps = folder.appIDs.compactMap { store.app(for: $0) }
-            FolderIconView(folder: folder, apps: apps)
+            FolderIconView(folder: folder, apps: store.apps(in: folder))
                 .onTapGesture { onOpenFolder(folder) }
         }
     }
