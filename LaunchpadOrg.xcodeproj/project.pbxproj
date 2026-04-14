@@ -1,0 +1,337 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B0100001000000000000001 /* LaunchpadOrgApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100001000000000000001 /* LaunchpadOrgApp.swift */; };
+		B0100002000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100002000000000000002 /* ContentView.swift */; };
+		B0100003000000000000003 /* AppItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100003000000000000003 /* AppItem.swift */; };
+		B0100004000000000000004 /* AppFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100004000000000000004 /* AppFolder.swift */; };
+		B0100005000000000000005 /* AppScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100005000000000000005 /* AppScanner.swift */; };
+		B0100006000000000000006 /* AppLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100006000000000000006 /* AppLauncher.swift */; };
+		B0100007000000000000007 /* LayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100007000000000000007 /* LayoutStore.swift */; };
+		B0100008000000000000008 /* AppGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100008000000000000008 /* AppGridView.swift */; };
+		B0100009000000000000009 /* AppIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100009000000000000009 /* AppIconView.swift */; };
+		B0100010000000000000010 /* FolderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100010000000000000010 /* FolderView.swift */; };
+		B0100011000000000000011 /* SearchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100011000000000000011 /* SearchBar.swift */; };
+		B0100020000000000000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A0100020000000000000020 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A0100000000000000000000 /* LaunchpadOrg.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LaunchpadOrg.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A0100001000000000000001 /* LaunchpadOrgApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchpadOrgApp.swift; sourceTree = "<group>"; };
+		A0100002000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A0100003000000000000003 /* AppItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppItem.swift; sourceTree = "<group>"; };
+		A0100004000000000000004 /* AppFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFolder.swift; sourceTree = "<group>"; };
+		A0100005000000000000005 /* AppScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppScanner.swift; sourceTree = "<group>"; };
+		A0100006000000000000006 /* AppLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLauncher.swift; sourceTree = "<group>"; };
+		A0100007000000000000007 /* LayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutStore.swift; sourceTree = "<group>"; };
+		A0100008000000000000008 /* AppGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGridView.swift; sourceTree = "<group>"; };
+		A0100009000000000000009 /* AppIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconView.swift; sourceTree = "<group>"; };
+		A0100010000000000000010 /* FolderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderView.swift; sourceTree = "<group>"; };
+		A0100011000000000000011 /* SearchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBar.swift; sourceTree = "<group>"; };
+		A0100020000000000000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A0100021000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A0100022000000000000022 /* LaunchpadOrg.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LaunchpadOrg.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C0100000000000000000000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D0100000000000000000000 /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				D0100001000000000000001 /* LaunchpadOrg */,
+				D0100999000000000000999 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D0100001000000000000001 /* LaunchpadOrg */ = {
+			isa = PBXGroup;
+			children = (
+				A0100001000000000000001 /* LaunchpadOrgApp.swift */,
+				A0100002000000000000002 /* ContentView.swift */,
+				D0100002000000000000002 /* Models */,
+				D0100003000000000000003 /* Services */,
+				D0100004000000000000004 /* Views */,
+				A0100020000000000000020 /* Assets.xcassets */,
+				A0100021000000000000021 /* Info.plist */,
+				A0100022000000000000022 /* LaunchpadOrg.entitlements */,
+			);
+			path = LaunchpadOrg;
+			sourceTree = "<group>";
+		};
+		D0100002000000000000002 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A0100003000000000000003 /* AppItem.swift */,
+				A0100004000000000000004 /* AppFolder.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		D0100003000000000000003 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A0100005000000000000005 /* AppScanner.swift */,
+				A0100006000000000000006 /* AppLauncher.swift */,
+				A0100007000000000000007 /* LayoutStore.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		D0100004000000000000004 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A0100008000000000000008 /* AppGridView.swift */,
+				A0100009000000000000009 /* AppIconView.swift */,
+				A0100010000000000000010 /* FolderView.swift */,
+				A0100011000000000000011 /* SearchBar.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		D0100999000000000000999 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A0100000000000000000000 /* LaunchpadOrg.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E0100000000000000000000 /* LaunchpadOrg */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F0100002000000000000002 /* Build configuration list for PBXNativeTarget "LaunchpadOrg" */;
+			buildPhases = (
+				G0100000000000000000000 /* Sources */,
+				C0100000000000000000000 /* Frameworks */,
+				H0100000000000000000000 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LaunchpadOrg;
+			productName = LaunchpadOrg;
+			productReference = A0100000000000000000000 /* LaunchpadOrg.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		I0100000000000000000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					E0100000000000000000000 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = F0100001000000000000001 /* Build configuration list for PBXProject "LaunchpadOrg" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D0100000000000000000000;
+			productRefGroup = D0100999000000000000999 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E0100000000000000000000 /* LaunchpadOrg */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		H0100000000000000000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0100020000000000000020 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		G0100000000000000000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0100001000000000000001 /* LaunchpadOrgApp.swift in Sources */,
+				B0100002000000000000002 /* ContentView.swift in Sources */,
+				B0100003000000000000003 /* AppItem.swift in Sources */,
+				B0100004000000000000004 /* AppFolder.swift in Sources */,
+				B0100005000000000000005 /* AppScanner.swift in Sources */,
+				B0100006000000000000006 /* AppLauncher.swift in Sources */,
+				B0100007000000000000007 /* LayoutStore.swift in Sources */,
+				B0100008000000000000008 /* AppGridView.swift in Sources */,
+				B0100009000000000000009 /* AppIconView.swift in Sources */,
+				B0100010000000000000010 /* FolderView.swift in Sources */,
+				B0100011000000000000011 /* SearchBar.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		J0100001000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		J0100002000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		J0100003000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LaunchpadOrg/LaunchpadOrg.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LaunchpadOrg/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = LaunchpadOrg;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.launchpad.LaunchpadOrg;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		J0100004000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LaunchpadOrg/LaunchpadOrg.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LaunchpadOrg/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = LaunchpadOrg;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.launchpad.LaunchpadOrg;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F0100001000000000000001 /* Build configuration list for PBXProject "LaunchpadOrg" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				J0100001000000000000001 /* Debug */,
+				J0100002000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F0100002000000000000002 /* Build configuration list for PBXNativeTarget "LaunchpadOrg" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				J0100003000000000000003 /* Debug */,
+				J0100004000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = I0100000000000000000000 /* Project object */;
+}
