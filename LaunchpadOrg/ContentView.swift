@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Environment(LayoutStore.self) private var store
@@ -135,6 +136,25 @@ struct ContentView: View {
         Color.black.opacity(0.55)
             .ignoresSafeArea()
             .onTapGesture { closeFolder() }
+            // Drop an in-folder drag anywhere on the backdrop → remove that
+            // app from the folder. The panel itself doesn't accept drops, so
+            // releases inside the panel fall through here too; the drop
+            // delegate no-ops unless the user was actually dragging an app
+            // out of the folder (drag.draggingOutOfFolder != nil).
+            .onDrop(
+                of: [UTType.text],
+                delegate: RemoveFromFolderDropDelegate(
+                    drag: drag,
+                    store: store,
+                    folderID: folder.id,
+                    onDidRemove: {
+                        // If the folder emptied out, close the panel.
+                        if currentFolder(id: folder.id) == nil {
+                            closeFolder()
+                        }
+                    }
+                )
+            )
             .transition(.opacity)
 
         FolderDetailView(

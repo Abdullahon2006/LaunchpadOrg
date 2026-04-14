@@ -62,7 +62,6 @@ struct FolderDetailView: View {
 
     @State private var editingName: String
     @FocusState private var nameFocused: Bool
-    @State private var removeZoneActive = false
 
     init(folder: AppFolder,
          apps: [AppItem],
@@ -108,8 +107,6 @@ struct FolderDetailView: View {
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 8)
-
-            removeDropZone
         }
         .padding(36)
         .frame(minWidth: 620, maxWidth: 780, minHeight: 440)
@@ -126,6 +123,10 @@ struct FolderDetailView: View {
             )
             .shadow(color: .black.opacity(0.5), radius: 40, y: 20)
         )
+        // Absorb drops that land *inside* the panel frame so they don't
+        // fall through to the backdrop's "remove from folder" delegate.
+        // Releasing on the panel just cancels the in-folder drag.
+        .onDrop(of: [UTType.text], delegate: AbsorbInFolderDropDelegate(drag: drag))
         .onAppear {
             if autoFocusName {
                 DispatchQueue.main.async { nameFocused = true }
@@ -134,61 +135,44 @@ struct FolderDetailView: View {
         .onExitCommand(perform: commitAndClose)
     }
 
-    /// Drop zone at the bottom. Dragging an app icon here removes it from
-    /// the folder (returning it to the main grid).
-    private var removeDropZone: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "arrow.up.forward.app.fill")
-            Text("Drag here to remove from folder")
-                .font(.system(size: 12, weight: .medium))
-        }
-        .foregroundStyle(.white.opacity(removeZoneActive ? 1.0 : 0.55))
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                .foregroundStyle(.white.opacity(removeZoneActive ? 0.9 : 0.3))
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(removeZoneActive ? 0.12 : 0.03))
-                )
-        )
-        .animation(.easeOut(duration: 0.15), value: removeZoneActive)
-        .onDrop(of: [UTType.text], delegate: RemoveFromFolderDropDelegate(
-            drag: drag,
-            store: store,
-            folderID: folder.id,
-            active: $removeZoneActive
-        ))
-    }
-
     private func commitAndClose() {
         onRename(editingName)
         onClose()
     }
 }
 
-/// Drop target for the "remove from folder" zone — reads the dragged app
-/// UUID from `DragState.draggingOutOfFolder`.
+/// Swallows drops that happen *inside* the folder panel so that dragging
+/// an app within the panel and releasing it there doesn't accidentally
+/// remove it from the folder.
+struct AbsorbInFolderDropDelegate: DropDelegate {
+    let drag: DragState
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+    func performDrop(info: DropInfo) -> Bool {
+        drag.draggingOutOfFolder = nil
+        return true
+    }
+}
+
+/// Drop target installed on the folder backdrop. Dragging an app out of the
+/// folder grid and releasing it anywhere outside the panel removes that app
+/// from the folder (and returns it to the main grid).
 struct RemoveFromFolderDropDelegate: DropDelegate {
     let drag: DragState
     let store: LayoutStore
     let folderID: UUID
-    @Binding var active: Bool
+    /// Called after a successful remove so ContentView can dismiss the
+    /// folder panel if it becomes empty.
+    var onDidRemove: (() -> Void)? = nil
 
-    func dropEntered(info: DropInfo) { active = true }
-    func dropExited(info: DropInfo) { active = false }
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
 
     func performDrop(info: DropInfo) -> Bool {
-        defer {
-            active = false
-            drag.draggingOutOfFolder = nil
-        }
+        defer { drag.draggingOutOfFolder = nil }
         guard let appID = drag.draggingOutOfFolder else { return false }
         store.removeAppFromFolder(folderID: folderID, appID: appID)
+        onDidRemove?()
         return true
     }
 }
