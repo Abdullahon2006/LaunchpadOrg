@@ -12,6 +12,11 @@ struct ContentView: View {
     @State private var newlyCreatedFolderID: UUID?
     @State private var selectedAppID: UUID?
 
+    // Generous margins — icons shouldn't touch the window edges.
+    private let horizontalMargin: CGFloat = 72
+    private let topMargin: CGFloat = 18
+    private let bottomMargin: CGFloat = 48
+
     // Grid sizing constants.
     private let preferredSlotWidth: CGFloat = 128
     private let preferredSlotHeight: CGFloat = 120
@@ -19,16 +24,21 @@ struct ContentView: View {
     private let maxCols = 12
     private let minRows = 3
     private let maxRows = 7
-    private let sidePadding: CGFloat = 48
-    private let topChromeHeight: CGFloat = 76 // search bar + its padding
+    private let searchBarHeight: CGFloat = 76
 
     var body: some View {
         GeometryReader { geo in
             let (cols, rows) = gridDims(in: geo.size)
-            let usable = max(0, geo.size.width - sidePadding * 2)
-            let slot = usable / CGFloat(cols)
-            let iconSize = min(128, max(60, slot - 38))
+            let usableW = max(0, geo.size.width - horizontalMargin * 2)
+            let slot = usableW / CGFloat(cols)
+            let iconSize = min(128, max(60, slot - 42))
             let pageSize = cols * rows
+            // Live reflow preview: if a drag is in flight, reorder flatNodes
+            // virtually so the UI shows other icons sliding to close the gap.
+            let visualFlat = store.previewFlat(
+                movingFrom: drag.source,
+                to: drag.hoverTarget
+            )
 
             ZStack {
                 background
@@ -37,17 +47,19 @@ struct ContentView: View {
                     HStack {
                         Spacer()
                         SearchBar(text: $query)
-                            .padding(.top, 22)
+                            .padding(.top, topMargin)
                         Spacer()
                     }
-                    .frame(height: topChromeHeight)
+                    .frame(height: searchBarHeight)
 
                     if query.isEmpty {
                         pager(width: geo.size.width,
                               cols: cols,
                               rows: rows,
-                              slot: slot,
-                              iconSize: iconSize)
+                              iconSize: iconSize,
+                              pageSize: pageSize,
+                              visualFlat: visualFlat)
+                        .padding(.bottom, bottomMargin)
                     } else {
                         SearchResultsGrid(
                             results: store.search(query),
@@ -55,7 +67,6 @@ struct ContentView: View {
                         )
                     }
                 }
-                .padding(.horizontal, sidePadding)
 
                 if let folder = openFolder, let latest = currentFolder(id: folder.id) {
                     folderOverlay(folder: latest)
@@ -67,7 +78,6 @@ struct ContentView: View {
             }
             .onChange(of: pageSize) { _, newValue in
                 store.pageSize = newValue
-                // Clamp selected page if we collapsed pages.
                 if selectedPage >= store.pages.count {
                     selectedPage = max(0, store.pages.count - 1)
                 }
@@ -91,19 +101,29 @@ struct ContentView: View {
         .ignoresSafeArea()
     }
 
-    // MARK: Pager — finger-following
+    // MARK: Pager
 
-    private func pager(width: CGFloat, cols: Int, rows: Int, slot: CGFloat, iconSize: CGFloat) -> some View {
-        let pageCount = max(store.pages.count, 1)
+    private func pager(width: CGFloat,
+                       cols: Int,
+                       rows: Int,
+                       iconSize: CGFloat,
+                       pageSize: Int,
+                       visualFlat: [LayoutNode]) -> some View {
+        // How many pages does the current virtual list occupy?
+        let pageCount = max(Int(ceil(Double(visualFlat.count) / Double(max(pageSize, 1)))), 1)
         let clamped = min(max(selectedPage, 0), pageCount - 1)
-        let pageW = width - sidePadding * 2
+        let pageW = max(1, width - horizontalMargin * 2)
+
         return HStack(spacing: 0) {
             ForEach(0 ..< pageCount, id: \.self) { idx in
+                let start = idx * pageSize
+                let end = min(start + pageSize, visualFlat.count)
+                let slice = (start < end) ? Array(visualFlat[start ..< end]) : []
                 AppGridView(
-                    pageIndex: idx,
+                    nodes: slice,
+                    baseFlatIndex: start,
                     cols: cols,
                     rows: rows,
-                    slotWidth: slot,
                     iconSize: iconSize,
                     selectedAppID: $selectedAppID,
                     onOpenFolder: { folder in
@@ -123,9 +143,8 @@ struct ContentView: View {
         }
         .frame(width: pageW, alignment: .leading)
         .offset(x: -CGFloat(clamped) * pageW + dragOffsetX)
-        // No implicit animation on dragOffsetX — it tracks the finger in real
-        // time. Only the *end-of-gesture snap* is animated (below).
         .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.88), value: clamped)
+        .padding(.horizontal, horizontalMargin)
         .clipped()
     }
 
@@ -136,11 +155,6 @@ struct ContentView: View {
         Color.black.opacity(0.55)
             .ignoresSafeArea()
             .onTapGesture { closeFolder() }
-            // Drop an in-folder drag anywhere on the backdrop → remove that
-            // app from the folder. The panel itself doesn't accept drops, so
-            // releases inside the panel fall through here too; the drop
-            // delegate no-ops unless the user was actually dragging an app
-            // out of the folder (drag.draggingOutOfFolder != nil).
             .onDrop(
                 of: [UTType.text],
                 delegate: RemoveFromFolderDropDelegate(
@@ -148,7 +162,6 @@ struct ContentView: View {
                     store: store,
                     folderID: folder.id,
                     onDidRemove: {
-                        // If the folder emptied out, close the panel.
                         if currentFolder(id: folder.id) == nil {
                             closeFolder()
                         }
@@ -178,10 +191,8 @@ struct ContentView: View {
     }
 
     private func currentFolder(id: UUID) -> AppFolder? {
-        for page in store.pages {
-            for node in page {
-                if case .folder(let f)? = node, f.id == id { return f }
-            }
+        for node in store.flatNodes {
+            if case .folder(let f) = node, f.id == id { return f }
         }
         return nil
     }
@@ -189,24 +200,20 @@ struct ContentView: View {
     // MARK: Grid sizing
 
     private func gridDims(in size: CGSize) -> (Int, Int) {
-        let usableW = max(0, size.width - sidePadding * 2)
-        let usableH = max(0, size.height - topChromeHeight - 32)
+        let usableW = max(0, size.width - horizontalMargin * 2)
+        let usableH = max(0, size.height - searchBarHeight - bottomMargin - 20)
         let cols = min(max(Int(usableW / preferredSlotWidth), minCols), maxCols)
         let rows = min(max(Int(usableH / preferredSlotHeight), minRows), maxRows)
         return (cols, rows)
     }
 
-    // MARK: Gestures — finger-following swipe
+    // MARK: Gestures
 
     private func installGestures(pageWidth: CGFloat) {
         GestureMonitor.shared.install()
-
-        let pageW = max(1, pageWidth - sidePadding * 2)
+        let pageW = max(1, pageWidth - horizontalMargin * 2)
 
         GestureMonitor.shared.onScrollDelta = { dx in
-            // While dragging the pager, the dragOffsetX follows the finger
-            // 1:1. Clamp to ±one page so an over-fast flick doesn't skip
-            // multiple pages.
             guard query.isEmpty, openFolder == nil else { return }
             let next = dragOffsetX + dx
             dragOffsetX = min(max(next, -pageW), pageW)
@@ -222,10 +229,6 @@ struct ContentView: View {
             } else if dragOffsetX > threshold, selectedPage > 0 {
                 newPage -= 1
             }
-            // The committed page change cancels out the drag offset: offset
-            // goes from (dragOffsetX) to 0 while base page shifts. Animate
-            // both together so the finger-follow motion continues smoothly
-            // into the snap rather than jumping.
             withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88)) {
                 selectedPage = newPage
                 dragOffsetX = 0
