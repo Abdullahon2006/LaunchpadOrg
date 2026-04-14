@@ -2,29 +2,48 @@ import Foundation
 import Observation
 
 /// Shared drag state so the drop handler can read the source synchronously
-/// instead of awaiting an `NSItemProvider.loadItem` callback (which made
-/// drops feel laggy — often 50–100 ms per drop).
+/// instead of awaiting an `NSItemProvider.loadItem` callback.
 ///
-/// `.onDrag` still has to return an `NSItemProvider` (SwiftUI requires it
-/// to start the drag session), but we ignore its payload on the receiving
-/// end and just consult `DragState.source` directly.
+/// The drop model:
+///   - drop on a folder  → always adds the app to the folder
+///   - drop on an app after dwelling ≥ 0.5 s → create a new folder
+///   - drop on an app otherwise → reorder (source takes target's slot)
 @Observable
 final class DragState {
-    /// The node currently being dragged — (pageIndex, nodeIndex). `nil`
-    /// means no drag in progress.
+    /// Source of the in-flight grid drag — (pageIndex, nodeIndex).
     var source: IndexPath?
 
-    /// The node the pointer is currently hovering over mid-drag. Used by
-    /// `AppIconView` / `FolderIconView` to render a target highlight.
+    /// Slot the pointer is currently over.
     var hoverTarget: IndexPath?
 
-    /// Page the pointer is over (used to auto-advance pages on hover at
-    /// the left/right edge of the window mid-drag — future work).
-    var hoverPage: Int?
+    /// Promoted to `true` after `source` has hovered the same `hoverTarget`
+    /// long enough to mean "merge into folder" rather than "reorder".
+    var willCreateFolder: Bool = false
+
+    /// An app currently being dragged out of an open folder sheet (separate
+    /// from `source`, which is only for the main grid).
+    var draggingOutOfFolder: UUID?
+
+    @ObservationIgnored private var dwellTimer: DispatchWorkItem?
+
+    /// Schedule a work item to run after `seconds`; cancels any prior dwell.
+    func scheduleDwell(_ seconds: TimeInterval, action: @escaping () -> Void) {
+        dwellTimer?.cancel()
+        let work = DispatchWorkItem(block: action)
+        dwellTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
+    func cancelDwell() {
+        dwellTimer?.cancel()
+        dwellTimer = nil
+    }
 
     func clear() {
         source = nil
         hoverTarget = nil
-        hoverPage = nil
+        willCreateFolder = false
+        draggingOutOfFolder = nil
+        cancelDwell()
     }
 }

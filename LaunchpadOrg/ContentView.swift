@@ -7,8 +7,6 @@ struct ContentView: View {
     @State private var query: String = ""
     @State private var selectedPage: Int = 0
     @State private var openFolder: AppFolder?
-    /// Set when a folder is newly created by a drop — forwards to
-    /// FolderDetailView so it autofocuses the name TextField.
     @State private var newlyCreatedFolderID: UUID?
     @State private var selectedAppID: UUID?
 
@@ -36,45 +34,55 @@ struct ContentView: View {
 
                     Spacer(minLength: 0)
                 }
-            }
-        }
-        .onAppear {
-            GestureMonitor.shared.install()
-            GestureMonitor.shared.onSwipePage = { direction in
-                guard query.isEmpty else { return }
-                let target = selectedPage + direction
-                if store.pages.indices.contains(target) {
-                    withAnimation(.interactiveSpring(response: 0.35, dampingFraction: 0.85)) {
-                        selectedPage = target
-                    }
+
+                // Folder overlay — replaces .sheet so we control the animation
+                // and can dismiss with a tap on the backdrop.
+                if let folder = openFolder,
+                   let latest = currentFolder(id: folder.id) {
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                        .onTapGesture { commitCloseFolder() }
+                        .transition(.opacity)
+
+                    FolderDetailView(
+                        folder: latest,
+                        apps: store.apps(in: latest),
+                        selectedAppID: $selectedAppID,
+                        autoFocusName: latest.id == newlyCreatedFolderID,
+                        onRename: { newName in
+                            store.renameFolder(id: latest.id, to: newName)
+                        },
+                        onClose: {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                                openFolder = nil
+                                newlyCreatedFolderID = nil
+                            }
+                        }
+                    )
+                    .transition(.scale(scale: 0.88).combined(with: .opacity))
                 }
             }
-            GestureMonitor.shared.onPinch = { magnification in
-                guard let w = NSApp.keyWindow else { return }
-                let isFull = w.styleMask.contains(.fullScreen)
-                if magnification < -0.15, isFull {
-                    w.toggleFullScreen(nil)
-                } else if magnification > 0.25, !isFull {
-                    w.toggleFullScreen(nil)
-                }
-            }
+            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: openFolder?.id)
         }
+        .onAppear(perform: installGestures)
         .onTapGesture { selectedAppID = nil }
-        .sheet(item: $openFolder) { folder in
-            FolderDetailView(
-                folder: folder,
-                apps: store.apps(in: folder),
-                selectedAppID: $selectedAppID,
-                autoFocusName: folder.id == newlyCreatedFolderID,
-                onRename: { newName in
-                    store.renameFolder(id: folder.id, to: newName)
-                },
-                onClose: {
-                    openFolder = nil
-                    newlyCreatedFolderID = nil
-                }
-            )
-            .environment(store)
+    }
+
+    /// Look up the folder fresh from the store each render so the detail view
+    /// reflects edits (rename, app-add, app-remove) without having to rebind.
+    private func currentFolder(id: UUID) -> AppFolder? {
+        for page in store.pages {
+            for node in page {
+                if case .folder(let f) = node, f.id == id { return f }
+            }
+        }
+        return nil
+    }
+
+    private func commitCloseFolder() {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+            openFolder = nil
+            newlyCreatedFolderID = nil
         }
     }
 
@@ -87,8 +95,6 @@ struct ContentView: View {
         .ignoresSafeArea()
     }
 
-    /// Custom offset-based pager. Only one page's grid is rendered in the
-    /// visible viewport; off-screen pages are clipped but still laid out.
     private func pagedGrid(width: CGFloat) -> some View {
         let pageCount = max(store.pages.count, 1)
         let clamped = min(max(selectedPage, 0), pageCount - 1)
@@ -97,10 +103,16 @@ struct ContentView: View {
                 AppGridView(
                     pageIndex: idx,
                     selectedAppID: $selectedAppID,
-                    onOpenFolder: { openFolder = $0 },
+                    onOpenFolder: { folder in
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                            openFolder = folder
+                        }
+                    },
                     onCreateFolder: { folder in
                         newlyCreatedFolderID = folder.id
-                        openFolder = folder
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                            openFolder = folder
+                        }
                     }
                 )
                 .frame(width: width)
@@ -110,5 +122,27 @@ struct ContentView: View {
         .offset(x: -CGFloat(clamped) * width)
         .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.85), value: clamped)
         .clipped()
+    }
+
+    private func installGestures() {
+        GestureMonitor.shared.install()
+        GestureMonitor.shared.onSwipePage = { direction in
+            guard query.isEmpty, openFolder == nil else { return }
+            let target = selectedPage + direction
+            if store.pages.indices.contains(target) {
+                withAnimation(.interactiveSpring(response: 0.35, dampingFraction: 0.85)) {
+                    selectedPage = target
+                }
+            }
+        }
+        GestureMonitor.shared.onPinch = { magnification in
+            guard let w = NSApp.keyWindow else { return }
+            let isFull = w.styleMask.contains(.fullScreen)
+            if magnification < -0.15, isFull {
+                w.toggleFullScreen(nil)
+            } else if magnification > 0.25, !isFull {
+                w.toggleFullScreen(nil)
+            }
+        }
     }
 }

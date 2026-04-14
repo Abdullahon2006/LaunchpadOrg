@@ -6,17 +6,18 @@ struct AppIconView: View {
     let item: AppItem
     var iconSize: CGFloat = 88
     @Binding var selectedAppID: UUID?
+    /// When non-nil, the context menu shows a "Remove from Folder" item.
+    var onRemoveFromFolder: (() -> Void)? = nil
 
     private var isSelected: Bool { selectedAppID == item.id }
 
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
-                // Selection highlight (rendered behind icon).
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: iconSize * 0.22, style: .continuous)
                     .fill(Color.white.opacity(isSelected ? 0.18 : 0))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        RoundedRectangle(cornerRadius: iconSize * 0.22, style: .continuous)
                             .stroke(Color.white.opacity(isSelected ? 0.55 : 0), lineWidth: 1.5)
                     )
                     .frame(width: iconSize + 16, height: iconSize + 16)
@@ -29,22 +30,24 @@ struct AppIconView: View {
             }
 
             Text(item.name)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: max(10, min(13, iconSize * 0.14)), weight: .medium))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.5), radius: 2)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(width: iconSize + 20)
+                .frame(width: iconSize + 28)
         }
         .contentShape(Rectangle())
-        // Double-click launches the app; single click only selects.
-        // IMPORTANT: the count:2 handler must be registered *before* the
-        // count:1 handler so SwiftUI waits for a potential second click.
+        // Double-click launches; single click selects.
         .onTapGesture(count: 2) { AppLauncher.launch(item) }
         .onTapGesture(count: 1) { selectedAppID = item.id }
         .contextMenu {
             Button("Open") { AppLauncher.launch(item) }
             Button("Show in Finder") { AppLauncher.showInFinder(item) }
+            if let onRemoveFromFolder {
+                Divider()
+                Button("Remove from Folder", role: .destructive) { onRemoveFromFolder() }
+            }
         }
         .help(item.name)
         .animation(.easeInOut(duration: 0.12), value: isSelected)

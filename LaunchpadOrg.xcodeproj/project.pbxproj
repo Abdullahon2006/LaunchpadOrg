@@ -20,6 +20,7 @@
 		B0100011000000000000011 /* SearchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100011000000000000011 /* SearchBar.swift */; };
 		B0100012000000000000012 /* GestureMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100012000000000000012 /* GestureMonitor.swift */; };
 		B0100013000000000000013 /* DragState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100013000000000000013 /* DragState.swift */; };
+		B0100014000000000000014 /* VisualEffectBlur.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0100014000000000000014 /* VisualEffectBlur.swift */; };
 		B0100020000000000000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A0100020000000000000020 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -38,6 +39,7 @@
 		A0100011000000000000011 /* SearchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBar.swift; sourceTree = "<group>"; };
 		A0100012000000000000012 /* GestureMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureMonitor.swift; sourceTree = "<group>"; };
 		A0100013000000000000013 /* DragState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragState.swift; sourceTree = "<group>"; };
+		A0100014000000000000014 /* VisualEffectBlur.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectBlur.swift; sourceTree = "<group>"; };
 		A0100020000000000000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A0100021000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A0100022000000000000022 /* LaunchpadOrg.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LaunchpadOrg.entitlements; sourceTree = "<group>"; };
@@ -105,6 +107,7 @@
 				A0100009000000000000009 /* AppIconView.swift */,
 				A0100010000000000000010 /* FolderView.swift */,
 				A0100011000000000000011 /* SearchBar.swift */,
+				A0100014000000000000014 /* VisualEffectBlur.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -199,6 +202,7 @@
 				B0100011000000000000011 /* SearchBar.swift in Sources */,
 				B0100012000000000000012 /* GestureMonitor.swift in Sources */,
 				B0100013000000000000013 /* DragState.swift in Sources */,
+				B0100014000000000000014 /* VisualEffectBlur.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
