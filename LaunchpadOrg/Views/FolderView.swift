@@ -44,14 +44,20 @@ struct FolderIconView: View {
 struct FolderDetailView: View {
     let folder: AppFolder
     let apps: [AppItem]
+    @Binding var selectedAppID: UUID?
     var onRename: (String) -> Void
     var onClose: () -> Void
 
     @State private var editingName: String
 
-    init(folder: AppFolder, apps: [AppItem], onRename: @escaping (String) -> Void, onClose: @escaping () -> Void) {
+    init(folder: AppFolder,
+         apps: [AppItem],
+         selectedAppID: Binding<UUID?>,
+         onRename: @escaping (String) -> Void,
+         onClose: @escaping () -> Void) {
         self.folder = folder
         self.apps = apps
+        self._selectedAppID = selectedAppID
         self.onRename = onRename
         self.onClose = onClose
         _editingName = State(initialValue: folder.name)
@@ -69,7 +75,7 @@ struct FolderDetailView: View {
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 5), spacing: 20) {
                 ForEach(apps) { app in
-                    AppIconView(item: app, iconSize: 72)
+                    AppIconView(item: app, iconSize: 72, selectedAppID: $selectedAppID)
                 }
             }
             .padding(24)

@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct AppGridView: View {
     @Environment(LayoutStore.self) private var store
     let pageIndex: Int
+    @Binding var selectedAppID: UUID?
     var onOpenFolder: (AppFolder) -> Void
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 24), count: 7)
@@ -34,11 +35,12 @@ struct AppGridView: View {
         switch node {
         case .app(let id):
             if let app = store.app(for: id) {
-                AppIconView(item: app)
+                AppIconView(item: app, selectedAppID: $selectedAppID)
             }
         case .folder(let folder):
             FolderIconView(folder: folder, apps: store.apps(in: folder))
-                .onTapGesture { onOpenFolder(folder) }
+                .onTapGesture(count: 2) { onOpenFolder(folder) }
+                .onTapGesture(count: 1) { selectedAppID = nil }
         }
     }
 }
@@ -74,13 +76,14 @@ struct GridDropDelegate: DropDelegate {
 
 struct SearchResultsGrid: View {
     let results: [AppItem]
+    @Binding var selectedAppID: UUID?
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 24), count: 7)
 
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 28) {
                 ForEach(results) { app in
-                    AppIconView(item: app)
+                    AppIconView(item: app, selectedAppID: $selectedAppID)
                 }
             }
             .padding(.horizontal, 60)
