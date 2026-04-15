@@ -23,52 +23,61 @@ struct AppGridView: View {
     var onCreateFolder: (AppFolder) -> Void
 
     var body: some View {
-        // Fixed-width columns keep the layout deterministic — `.flexible()`
-        // with an ambiguous width proposal was causing rows 3+ to collapse
-        // to half-width. `slotWidth` already accounts for spacing upstream.
-        let columns = Array(
-            repeating: GridItem(.flexible(minimum: 40, maximum: .infinity),
-                                spacing: 12),
-            count: cols
-        )
-        // Build id → real flat index once per page render. Computing it here
-        // (vs. passing it in as a prop) keeps AppGridView's inputs stable
-        // during swipes — otherwise the dict is a fresh instance every
-        // scroll frame and SwiftUI re-renders every slot for nothing.
+        // Build id → real flat index once per page render.
         let idToRealIndex = Self.buildIndexMap(store.flatNodes)
-        // Hoist the identity fingerprint outside the ForEach — otherwise
-        // every slot recomputes the full id list, which is O(n²) per render.
+        // Hoist the identity fingerprint outside the ForEach so the
+        // reflow animation has a single driver per page.
         let identityKey = nodes.map(\.id)
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
-            ForEach(nodes, id: \.id) { node in
-                let real = idToRealIndex[node.id] ?? 0
-                slotView(node: node, realIndex: real)
-                    .frame(height: iconSize + 28)
-                    .opacity(drag.source == real ? 0.22 : 1)
-                    .scaleEffect(scaleFor(real))
-                    .onDrop(
-                        of: [UTType.text],
-                        delegate: FastDropDelegate(
-                            store: store,
-                            drag: drag,
-                            targetRealIndex: real,
-                            cellWidth: slotWidth,
-                            onCreateFolder: onCreateFolder
-                        )
-                    )
+        // Manual row-by-row layout. LazyVGrid's flex-column distribution
+        // was collapsing rows past the first couple to a narrower width
+        // in some window sizes; a plain VStack-of-HStacks is deterministic
+        // and pins the cell size to exactly `slotWidth` regardless of
+        // how SwiftUI negotiates proposals upstream.
+        let rowSpacing: CGFloat = 18
+        let colSpacing: CGFloat = 12
+        let rowCount = Int(ceil(Double(nodes.count) / Double(max(cols, 1))))
+        VStack(alignment: .leading, spacing: rowSpacing) {
+            ForEach(0 ..< rowCount, id: \.self) { row in
+                HStack(spacing: colSpacing) {
+                    ForEach(0 ..< cols, id: \.self) { col in
+                        let localIdx = row * cols + col
+                        cellView(localIdx: localIdx, idToRealIndex: idToRealIndex)
+                            .frame(width: slotWidth, height: iconSize + 28)
+                    }
+                }
             }
         }
         // Animate reflow + hover highlights at the grid level so there's one
-        // animation driver per page rather than one per cell. Using a short
-        // interpolating spring keeps the reflow snappy during active drags.
+        // animation driver per page rather than one per cell.
         .animation(.interpolatingSpring(stiffness: 420, damping: 34), value: identityKey)
         .animation(.easeOut(duration: 0.12), value: drag.hoverTarget)
         .animation(.easeOut(duration: 0.15), value: drag.willCreateFolder)
-        // Only add vertical slack so short / incomplete pages hug the top.
-        // Do NOT wrap with `.frame(maxWidth: .infinity)` — that proposes an
-        // infinite width to LazyVGrid and flexible columns collapse past
-        // the first couple of rows.
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    @ViewBuilder
+    private func cellView(localIdx: Int, idToRealIndex: [UUID: Int]) -> some View {
+        if localIdx < nodes.count {
+            let node = nodes[localIdx]
+            let real = idToRealIndex[node.id] ?? 0
+            slotView(node: node, realIndex: real)
+                .opacity(drag.source == real ? 0.22 : 1)
+                .scaleEffect(scaleFor(real))
+                .onDrop(
+                    of: [UTType.text],
+                    delegate: FastDropDelegate(
+                        store: store,
+                        drag: drag,
+                        targetRealIndex: real,
+                        cellWidth: slotWidth,
+                        onCreateFolder: onCreateFolder
+                    )
+                )
+        } else {
+            // Empty trailing cells on a partial last row — take up the slot
+            // so the row doesn't stretch to fill the page width.
+            Color.clear
+        }
     }
 
     private static func buildIndexMap(_ flat: [LayoutNode]) -> [UUID: Int] {

@@ -32,7 +32,11 @@ struct ContentView: View {
         GeometryReader { geo in
             let (cols, rows) = gridDims(in: geo.size)
             let usableW = max(0, geo.size.width - horizontalMargin * 2)
-            let slot = usableW / CGFloat(cols)
+            // Account for inter-column spacing so `cols` cells of `slot` wide
+            // plus their gaps add up to exactly `usableW` — otherwise the row
+            // was overflowing the page by (cols-1)*spacing pixels.
+            let colSpacing: CGFloat = 12
+            let slot = max(60, (usableW - CGFloat(cols - 1) * colSpacing) / CGFloat(cols))
             let iconSize = min(128, max(60, slot - 42))
             let pageSize = cols * rows
             // Live reflow preview: if a drag is in flight, reorder flatNodes
@@ -333,7 +337,7 @@ struct ContentView: View {
             // width) commits the flip. Paired with the snap spring below,
             // the feel is "let go and it decides" rather than "drag all
             // the way across".
-            let threshold = pageW / 7
+            let threshold = pageW / 12
             if dragOffsetX < -threshold, selectedPage < pageCount - 1 {
                 newPage += 1
             } else if dragOffsetX > threshold, selectedPage > 0 {
