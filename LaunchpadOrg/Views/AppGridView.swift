@@ -35,21 +35,18 @@ struct AppGridView: View {
         // how SwiftUI negotiates proposals upstream.
         let rowSpacing: CGFloat = 18
         let colSpacing: CGFloat = 12
-        let rowCount = Int(ceil(Double(nodes.count) / Double(max(cols, 1))))
         let gridWidth = CGFloat(cols) * slotWidth + CGFloat(max(cols - 1, 0)) * colSpacing
-        // Materialize the ranges into Arrays — SwiftUI's `ForEach(0..<N)`
-        // initializer assumes a compile-time-constant range, and silently
-        // misbehaves when N is runtime-variable (stale cached count → some
-        // rows short of their full column count). `Array(...)` forces the
-        // id-based initializer, which handles runtime sizes correctly.
-        let rowIndices = Array(0 ..< rowCount)
-        let colIndices = Array(0 ..< cols)
+        // Build the row layout as a concrete nested array — `[RowModel]`
+        // where each row already carries its own `[CellModel]` with cols
+        // entries (real nodes padded with nils). This avoids ForEach-over-
+        // index-range pitfalls during fullscreen-transition size flux, where
+        // cols and nodes.count were sometimes out of phase across passes.
+        let rows = Self.buildRows(nodes: nodes, cols: cols)
         VStack(alignment: .leading, spacing: rowSpacing) {
-            ForEach(rowIndices, id: \.self) { row in
+            ForEach(rows) { row in
                 HStack(spacing: colSpacing) {
-                    ForEach(colIndices, id: \.self) { col in
-                        let localIdx = row * cols + col
-                        cellView(localIdx: localIdx, idToRealIndex: idToRealIndex)
+                    ForEach(row.cells) { cell in
+                        cellView(cell: cell, idToRealIndex: idToRealIndex)
                             .frame(width: slotWidth, height: iconSize + 28)
                     }
                 }
@@ -70,9 +67,8 @@ struct AppGridView: View {
     }
 
     @ViewBuilder
-    private func cellView(localIdx: Int, idToRealIndex: [UUID: Int]) -> some View {
-        if localIdx < nodes.count {
-            let node = nodes[localIdx]
+    private func cellView(cell: CellModel, idToRealIndex: [UUID: Int]) -> some View {
+        if let node = cell.node {
             let real = idToRealIndex[node.id] ?? 0
             slotView(node: node, realIndex: real)
                 .opacity(drag.source == real ? 0.22 : 1)
@@ -92,6 +88,38 @@ struct AppGridView: View {
             // so the row doesn't stretch to fill the page width.
             Color.clear
         }
+    }
+
+    /// One cell slot — carries either a real node or nil (padding on the
+    /// last partial row). The stable `id` combines row+col so SwiftUI
+    /// treats each slot as its own identity and can't recycle a row's
+    /// cells across renders with mismatched cols.
+    struct CellModel: Identifiable {
+        let id: String
+        let node: LayoutNode?
+    }
+
+    struct RowModel: Identifiable {
+        let id: Int
+        let cells: [CellModel]
+    }
+
+    private static func buildRows(nodes: [LayoutNode], cols: Int) -> [RowModel] {
+        let c = max(cols, 1)
+        let rowCount = max(Int(ceil(Double(nodes.count) / Double(c))), nodes.isEmpty ? 0 : 1)
+        var rows: [RowModel] = []
+        rows.reserveCapacity(rowCount)
+        for r in 0 ..< rowCount {
+            var cells: [CellModel] = []
+            cells.reserveCapacity(c)
+            for col in 0 ..< c {
+                let i = r * c + col
+                let node: LayoutNode? = (i < nodes.count) ? nodes[i] : nil
+                cells.append(CellModel(id: "\(r)-\(col)", node: node))
+            }
+            rows.append(RowModel(id: r, cells: cells))
+        }
+        return rows
     }
 
     private static func buildIndexMap(_ flat: [LayoutNode]) -> [UUID: Int] {
