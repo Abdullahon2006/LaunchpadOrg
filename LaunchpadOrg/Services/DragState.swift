@@ -1,6 +1,13 @@
 import Foundation
 import Observation
 
+/// Which part of a cell the pointer is over during a drag.
+enum DropZone {
+    case insertBefore   // left third — reorder (insert before the hovered item)
+    case insertAfter    // right third — reorder (insert after the hovered item)
+    case merge          // center third — on release, create folder / add to folder
+}
+
 /// Shared drag state — read synchronously by drop handlers so we don't pay
 /// the cost of an NSItemProvider round-trip.
 ///
@@ -17,8 +24,14 @@ final class DragState {
     /// Flat slot index currently under the pointer.
     var hoverTarget: Int?
 
-    /// Promoted to true once the pointer has dwelt on the same target long
-    /// enough that a drop should create a folder instead of reordering.
+    /// Which zone of the hovered cell the pointer is over. Drives the live
+    /// reflow preview (insert opens a gap; merge keeps the layout still and
+    /// highlights the target).
+    var dropZone: DropZone = .merge
+
+    /// True when the current hover zone would produce a folder on release.
+    /// Derived from `dropZone == .merge` and the hovered node's kind, but
+    /// cached so views can drive animations off a single flag.
     var willCreateFolder: Bool = false
 
     /// App currently being dragged out of an open folder panel (decoupled
@@ -42,6 +55,7 @@ final class DragState {
     func clear() {
         source = nil
         hoverTarget = nil
+        dropZone = .merge
         willCreateFolder = false
         draggingOutOfFolder = nil
         cancelDwell()

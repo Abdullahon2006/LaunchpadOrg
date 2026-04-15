@@ -11,6 +11,8 @@ struct ContentView: View {
     @State private var openFolder: AppFolder?
     @State private var newlyCreatedFolderID: UUID?
     @State private var selectedAppID: UUID?
+    @State private var highlightedSearchIndex: Int = 0
+    @FocusState private var searchFocused: Bool
 
     // Generous margins — icons shouldn't touch the window edges.
     private let horizontalMargin: CGFloat = 72
@@ -37,8 +39,10 @@ struct ContentView: View {
             // virtually so the UI shows other icons sliding to close the gap.
             let visualFlat = store.previewFlat(
                 movingFrom: drag.source,
-                to: drag.hoverTarget
+                to: drag.hoverTarget,
+                zone: drag.dropZone
             )
+            let searchResults = store.search(query)
 
             ZStack {
                 background
@@ -46,7 +50,7 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     HStack {
                         Spacer()
-                        SearchBar(text: $query)
+                        SearchBar(text: $query, focused: $searchFocused)
                             .padding(.top, topMargin)
                         Spacer()
                     }
@@ -57,12 +61,14 @@ struct ContentView: View {
                               cols: cols,
                               rows: rows,
                               iconSize: iconSize,
+                              slotWidth: slot,
                               pageSize: pageSize,
                               visualFlat: visualFlat)
                         .padding(.bottom, bottomMargin)
                     } else {
                         SearchResultsGrid(
-                            results: store.search(query),
+                            results: searchResults,
+                            highlightedIndex: min(highlightedSearchIndex, max(searchResults.count - 1, 0)),
                             selectedAppID: $selectedAppID
                         )
                     }
@@ -86,8 +92,41 @@ struct ContentView: View {
                 installGestures(pageWidth: geo.size.width)
             }
             .animation(.spring(response: 0.32, dampingFraction: 0.82), value: openFolder?.id)
+            .onChange(of: query) { _, newValue in
+                highlightedSearchIndex = 0
+                if !newValue.isEmpty { searchFocused = true }
+            }
+            .focusable()
+            .onKeyPress(.escape) {
+                if !query.isEmpty {
+                    query = ""
+                    searchFocused = false
+                    return .handled
+                }
+                return .ignored
+            }
+            .onKeyPress(.return) {
+                let results = store.search(query)
+                guard !results.isEmpty else { return .ignored }
+                let idx = min(max(highlightedSearchIndex, 0), results.count - 1)
+                AppLauncher.launch(results[idx])
+                return .handled
+            }
+            .onKeyPress(.leftArrow) { moveHighlight(-1) }
+            .onKeyPress(.rightArrow) { moveHighlight(1) }
+            .onKeyPress(.upArrow) { moveHighlight(-7) }
+            .onKeyPress(.downArrow) { moveHighlight(7) }
         }
         .onTapGesture { selectedAppID = nil }
+    }
+
+    private func moveHighlight(_ delta: Int) -> KeyPress.Result {
+        let results = store.search(query)
+        guard !results.isEmpty else { return .ignored }
+        let next = min(max(highlightedSearchIndex + delta, 0), results.count - 1)
+        highlightedSearchIndex = next
+        selectedAppID = results[next].id
+        return .handled
     }
 
     // MARK: Background
@@ -107,6 +146,7 @@ struct ContentView: View {
                        cols: Int,
                        rows: Int,
                        iconSize: CGFloat,
+                       slotWidth: CGFloat,
                        pageSize: Int,
                        visualFlat: [LayoutNode]) -> some View {
         // How many pages does the current virtual list occupy?
@@ -125,6 +165,7 @@ struct ContentView: View {
                     cols: cols,
                     rows: rows,
                     iconSize: iconSize,
+                    slotWidth: slotWidth,
                     selectedAppID: $selectedAppID,
                     onOpenFolder: { folder in
                         withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
@@ -144,8 +185,13 @@ struct ContentView: View {
         .frame(width: pageW, alignment: .leading)
         .offset(x: -CGFloat(clamped) * pageW + dragOffsetX)
         .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.88), value: clamped)
-        .padding(.horizontal, horizontalMargin)
+        // Clip *inside* the margin so adjacent pages can't bleed into it
+        // while swiping. Must come before the outer `.padding` so clipping
+        // happens on the page-wide region, not the padded region.
+        .frame(width: pageW)
         .clipped()
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, horizontalMargin)
     }
 
     // MARK: Folder overlay

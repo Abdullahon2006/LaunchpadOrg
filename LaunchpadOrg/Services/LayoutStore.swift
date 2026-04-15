@@ -238,14 +238,35 @@ final class LayoutStore {
     // like if the item at `from` were dropped at `to`, leaving the real
     // store untouched.
 
-    func previewFlat(movingFrom from: Int?, to: Int?) -> [LayoutNode] {
+    func previewFlat(movingFrom from: Int?, to: Int?, zone: DropZone) -> [LayoutNode] {
         guard let from, let to,
-              from != to,
               flatNodes.indices.contains(from) else { return flatNodes }
+
+        // Merge-zone drops keep the layout exactly as-is — the source icon
+        // stays "lifted" (ContentView dims it) and the target gets a highlight
+        // ring; no gap is opened. That's the "bring icon onto icon" case.
+        if zone == .merge { return flatNodes }
+
+        // Insert-between: open a gap at the target slot so the surrounding
+        // icons visibly reflow. For .insertAfter we insert one slot to the
+        // right of the hovered cell.
         var list = flatNodes
-        let clampedTo = min(max(to, 0), list.count - 1)
         let item = list.remove(at: from)
-        list.insert(item, at: clampedTo)
+        var insertAt = to
+        if from < to { insertAt -= 1 }         // account for the removed slot
+        if zone == .insertAfter { insertAt += 1 }
+        insertAt = min(max(insertAt, 0), list.count)
+        list.insert(item, at: insertAt)
         return list
+    }
+
+    /// Convert a hovered (target, zone) pair into the flat insert-index that
+    /// `move(from:to:)` expects. Used by the drop delegate on release.
+    func insertIndex(for target: Int, zone: DropZone, from source: Int) -> Int {
+        var t = target
+        if zone == .insertAfter { t += 1 }
+        // `move` works on pre-removal indices, so no source-shift adjustment
+        // is needed here — it handles the remove+insert itself.
+        return min(max(t, 0), flatNodes.count - (source == t ? 0 : 0))
     }
 }

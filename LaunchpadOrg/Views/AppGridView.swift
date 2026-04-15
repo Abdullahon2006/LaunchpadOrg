@@ -17,6 +17,7 @@ struct AppGridView: View {
     let cols: Int
     let rows: Int
     let iconSize: CGFloat
+    let slotWidth: CGFloat
     @Binding var selectedAppID: UUID?
     var onOpenFolder: (AppFolder) -> Void
     var onCreateFolder: (AppFolder) -> Void
@@ -39,6 +40,7 @@ struct AppGridView: View {
                             store: store,
                             drag: drag,
                             targetRealIndex: real,
+                            cellWidth: slotWidth,
                             onCreateFolder: onCreateFolder
                         )
                     )
@@ -48,7 +50,8 @@ struct AppGridView: View {
 
     private func scaleFor(_ real: Int) -> CGFloat {
         guard drag.hoverTarget == real, drag.source != real else { return 1 }
-        return drag.willCreateFolder ? 1.12 : 1.04
+        // Merge zone = folder cue → pop the target larger.
+        return drag.willCreateFolder ? 1.12 : 1.0
     }
 
     @ViewBuilder
@@ -80,55 +83,89 @@ struct AppGridView: View {
     }
 }
 
-/// Drop delegate — records hover target for live-reflow preview, arms the
-/// dwell timer for folder creation, and commits a move or merge on release.
+/// Drop delegate — classifies the pointer position inside the hovered cell
+/// into one of three zones (insert-before / merge / insert-after) and drives
+/// the preview + commit from that. No dwell timer: hovering the icon center
+/// is itself the "create folder" signal.
 struct FastDropDelegate: DropDelegate {
     let store: LayoutStore
     let drag: DragState
     let targetRealIndex: Int
+    let cellWidth: CGFloat
     let onCreateFolder: (AppFolder) -> Void
+
+    private func zone(for info: DropInfo) -> DropZone {
+        // DropInfo.location is cell-local (origin at top-left of the target).
+        // Split the cell horizontally into thirds.
+        let w = max(cellWidth, 1)
+        let x = info.location.x
+        if x < w * 0.33 { return .insertBefore }
+        if x > w * 0.67 { return .insertAfter }
+        return .merge
+    }
 
     func dropEntered(info: DropInfo) {
         drag.hoverTarget = targetRealIndex
-        drag.willCreateFolder = false
-        drag.scheduleDwell(0.5) {
-            drag.willCreateFolder = true
-        }
+        updateZone(info: info)
     }
 
     func dropExited(info: DropInfo) {
         if drag.hoverTarget == targetRealIndex {
             drag.hoverTarget = nil
             drag.willCreateFolder = false
-            drag.cancelDwell()
+            drag.dropZone = .merge
         }
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
+        if drag.hoverTarget != targetRealIndex {
+            drag.hoverTarget = targetRealIndex
+        }
+        updateZone(info: info)
+        return DropProposal(operation: .move)
+    }
+
+    private func updateZone(info: DropInfo) {
+        let z = zone(for: info)
+        drag.dropZone = z
+        // "Will create folder" = merging onto a different slot. For folder
+        // targets this means "will add to folder"; for app targets, "will
+        // make a new folder". Either way the highlight ring is the right cue.
+        let differentSlot = drag.source != targetRealIndex
+        drag.willCreateFolder = (z == .merge) && differentSlot
     }
 
     func performDrop(info: DropInfo) -> Bool {
         let source = drag.source
-        let wantsFolder = drag.willCreateFolder
+        let z = drag.dropZone
         defer { drag.clear() }
-        guard let source, source != targetRealIndex,
+        guard let source,
               store.flatNodes.indices.contains(targetRealIndex) else {
             return false
         }
 
-        let targetNode = store.flatNodes[targetRealIndex]
-        switch targetNode {
-        case .folder:
-            store.mergeOnto(source: source, target: targetRealIndex)
-        case .app where wantsFolder:
-            if let newFolder = store.mergeOnto(source: source, target: targetRealIndex) {
-                DispatchQueue.main.async { onCreateFolder(newFolder) }
+        // Merge zone → folder create / add to folder.
+        if z == .merge {
+            guard source != targetRealIndex else { return false }
+            let targetNode = store.flatNodes[targetRealIndex]
+            switch targetNode {
+            case .folder:
+                store.mergeOnto(source: source, target: targetRealIndex)
+            case .app:
+                if let newFolder = store.mergeOnto(source: source, target: targetRealIndex) {
+                    DispatchQueue.main.async { onCreateFolder(newFolder) }
+                }
             }
-        case .app:
-            // Live-reflow already previewed this via the UI's virtual order;
-            // commit the actual shift now.
-            store.move(from: source, to: targetRealIndex)
+            return true
+        }
+
+        // Insert-between: compute the landing slot and reorder.
+        var insertAt = targetRealIndex + (z == .insertAfter ? 1 : 0)
+        // `move(from:to:)` removes first, so adjust when moving rightward.
+        if source < insertAt { insertAt -= 1 }
+        insertAt = min(max(insertAt, 0), store.flatNodes.count - 1)
+        if insertAt != source {
+            store.move(from: source, to: insertAt)
         }
         return true
     }
@@ -136,14 +173,17 @@ struct FastDropDelegate: DropDelegate {
 
 struct SearchResultsGrid: View {
     let results: [AppItem]
+    let highlightedIndex: Int
     @Binding var selectedAppID: UUID?
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 7)
 
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 20) {
-                ForEach(results) { app in
-                    AppIconView(item: app, selectedAppID: $selectedAppID)
+                ForEach(Array(results.enumerated()), id: \.element.id) { idx, app in
+                    AppIconView(item: app, selectedAppID: .constant(
+                        idx == highlightedIndex ? app.id : selectedAppID
+                    ))
                 }
             }
             .padding(.horizontal, 48)
