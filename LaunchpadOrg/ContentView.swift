@@ -112,6 +112,12 @@ struct ContentView: View {
             .onAppear {
                 store.pageSize = pageSize
                 installGestures(pageWidth: geo.size.width)
+                // Clamp to a valid integer page on first appearance. If the
+                // app was last closed mid-swipe (or a stray scroll event
+                // landed during fullscreen restoration), dragOffsetX could
+                // be non-zero and leave the pager stranded between pages.
+                dragOffsetX = 0
+                selectedPage = min(max(selectedPage, 0), max(store.pages.count - 1, 0))
             }
             .onChange(of: pageSize) { _, newValue in
                 store.pageSize = newValue
@@ -121,6 +127,11 @@ struct ContentView: View {
             }
             .onChange(of: geo.size.width) { _, _ in
                 installGestures(pageWidth: geo.size.width)
+                // Any window resize (esp. fullscreen enter/exit) invalidates
+                // the current swipe offset: the previous dragOffsetX was
+                // relative to the old pageW and would leave the pager
+                // stranded between two pages at the new geometry.
+                dragOffsetX = 0
             }
             .animation(.spring(response: 0.32, dampingFraction: 0.82), value: openFolder?.id)
             .onChange(of: query) { _, newValue in
@@ -217,8 +228,11 @@ struct ContentView: View {
         let clamped = min(max(selectedPage, 0), pageCount - 1)
         let pageW = max(1, width - horizontalMargin * 2)
 
+        // Materialize the page index array so ForEach uses the id-based
+        // initializer (stable against runtime-variable pageCount).
+        let pageIndices = Array(0 ..< pageCount)
         return HStack(spacing: 0) {
-            ForEach(0 ..< pageCount, id: \.self) { idx in
+            ForEach(pageIndices, id: \.self) { idx in
                 let start = idx * pageSize
                 let end = min(start + pageSize, visualFlat.count)
                 let slice = (start < end) ? Array(visualFlat[start ..< end]) : []
@@ -245,14 +259,14 @@ struct ContentView: View {
                 .frame(width: pageW, alignment: .topLeading)
             }
         }
-        .frame(width: pageW)
+        // Let the HStack's intrinsic size be (pageCount * pageW) — don't
+        // pin it to pageW here or SwiftUI may propose squeezed widths to
+        // children during geometry-flux renders (fullscreen transitions).
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .offset(x: -CGFloat(clamped) * pageW + dragOffsetX)
         .animation(.spring(response: 0.28, dampingFraction: 0.9), value: clamped)
-        // Clip *inside* the margin so adjacent pages can't bleed into it
-        // while swiping. Must come before the outer `.padding` so clipping
-        // happens on the page-wide region, not the padded region.
-        .frame(width: pageW)
+        // Single clip frame — windows the offset HStack to exactly one page.
+        .frame(width: pageW, alignment: .topLeading)
         .clipped()
         .frame(maxWidth: .infinity)
         .padding(.horizontal, horizontalMargin)
