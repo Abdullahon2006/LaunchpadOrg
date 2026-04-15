@@ -50,13 +50,16 @@ struct AppGridView: View {
             }
         }
         // Animate reflow + hover highlights at the grid level so there's one
-        // animation driver per page rather than one per cell.
-        .animation(.spring(response: 0.32, dampingFraction: 0.78), value: identityKey)
-        .animation(.easeOut(duration: 0.15), value: drag.hoverTarget)
-        .animation(.easeOut(duration: 0.2), value: drag.willCreateFolder)
-        // Short / incomplete pages should hug the top-left rather than
-        // centering the grid in the page frame.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // animation driver per page rather than one per cell. Using a short
+        // interpolating spring keeps the reflow snappy during active drags.
+        .animation(.interpolatingSpring(stiffness: 420, damping: 34), value: identityKey)
+        .animation(.easeOut(duration: 0.12), value: drag.hoverTarget)
+        .animation(.easeOut(duration: 0.15), value: drag.willCreateFolder)
+        // Fill the page width first (so LazyVGrid gets a proper wide proposal
+        // and uses all `cols` columns), then top-align vertically — short /
+        // incomplete pages hug the top edge instead of centering.
+        .frame(maxWidth: .infinity)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func scaleFor(_ real: Int) -> CGFloat {

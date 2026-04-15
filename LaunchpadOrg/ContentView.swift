@@ -74,6 +74,33 @@ struct ContentView: View {
                     }
                 }
 
+                // Edge drag-advance strips: while a grid drag is in flight
+                // and the pointer dwells on the left/right 48 pt of the
+                // window, flip to the previous / next page so the user can
+                // carry an icon across pages.
+                if drag.source != nil && query.isEmpty && openFolder == nil {
+                    HStack(spacing: 0) {
+                        Color.clear
+                            .frame(width: 48)
+                            .contentShape(Rectangle())
+                            .onDrop(of: [UTType.text],
+                                    delegate: EdgePageFlipDropDelegate(
+                                        drag: drag,
+                                        advance: { flipPage(by: -1) }
+                                    ))
+                        Spacer()
+                        Color.clear
+                            .frame(width: 48)
+                            .contentShape(Rectangle())
+                            .onDrop(of: [UTType.text],
+                                    delegate: EdgePageFlipDropDelegate(
+                                        drag: drag,
+                                        advance: { flipPage(by: 1) }
+                                    ))
+                    }
+                    .allowsHitTesting(true)
+                }
+
                 if let folder = openFolder, let latest = currentFolder(id: folder.id) {
                     folderOverlay(folder: latest)
                 }
@@ -116,8 +143,40 @@ struct ContentView: View {
             .onKeyPress(.rightArrow) { moveHighlight(1) }
             .onKeyPress(.upArrow) { moveHighlight(-7) }
             .onKeyPress(.downArrow) { moveHighlight(7) }
+            // Any printable keystroke anywhere in the window: funnel it into
+            // the search field. Matches Spotlight / Launchpad behaviour.
+            .onKeyPress(phases: .down) { press in
+                guard openFolder == nil else { return .ignored }
+                // Ignore control/command combos and non-character keys.
+                if press.modifiers.contains(.command) || press.modifiers.contains(.control) {
+                    return .ignored
+                }
+                let chars = press.characters
+                guard chars.count == 1,
+                      let scalar = chars.unicodeScalars.first,
+                      CharacterSet.alphanumerics.contains(scalar) ||
+                      CharacterSet.punctuationCharacters.contains(scalar) ||
+                      scalar == " " else {
+                    return .ignored
+                }
+                if !searchFocused {
+                    query.append(chars)
+                    searchFocused = true
+                    return .handled
+                }
+                return .ignored
+            }
         }
         .onTapGesture { selectedAppID = nil }
+    }
+
+    private func flipPage(by delta: Int) {
+        let pageCount = max(store.pages.count, 1)
+        let next = min(max(selectedPage + delta, 0), pageCount - 1)
+        guard next != selectedPage else { return }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) {
+            selectedPage = next
+        }
     }
 
     private func moveHighlight(_ delta: Int) -> KeyPress.Result {
@@ -195,7 +254,7 @@ struct ContentView: View {
         .frame(width: pageW)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .offset(x: -CGFloat(clamped) * pageW + dragOffsetX)
-        .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.88), value: clamped)
+        .animation(.spring(response: 0.42, dampingFraction: 0.9), value: clamped)
         // Clip *inside* the margin so adjacent pages can't bleed into it
         // while swiping. Must come before the outer `.padding` so clipping
         // happens on the page-wide region, not the padded region.
@@ -280,13 +339,15 @@ struct ContentView: View {
             guard query.isEmpty, openFolder == nil else { return }
             let pageCount = max(store.pages.count, 1)
             var newPage = selectedPage
-            let threshold = pageW / 4
+            // Tighter threshold — you actually have to commit to a swipe
+            // before the page flips.
+            let threshold = pageW / 3
             if dragOffsetX < -threshold, selectedPage < pageCount - 1 {
                 newPage += 1
             } else if dragOffsetX > threshold, selectedPage > 0 {
                 newPage -= 1
             }
-            withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88)) {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
                 selectedPage = newPage
                 dragOffsetX = 0
             }
@@ -301,5 +362,38 @@ struct ContentView: View {
                 w.toggleFullScreen(nil)
             }
         }
+    }
+}
+
+/// Drop delegate for the left/right edge strips. While a drag hovers the
+/// strip for ~0.4 s, it flips the pager to the neighbouring page. Lets the
+/// user carry an icon across pages without first releasing it.
+struct EdgePageFlipDropDelegate: DropDelegate {
+    let drag: DragState
+    let advance: () -> Void
+
+    func dropEntered(info: DropInfo) {
+        // Only arm when an actual grid drag is in progress.
+        guard drag.source != nil else { return }
+        drag.scheduleDwell(0.4) {
+            advance()
+            // Re-arm so continued hover keeps paging forward.
+            drag.scheduleDwell(0.55) { advance() }
+        }
+    }
+
+    func dropExited(info: DropInfo) {
+        drag.cancelDwell()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        // Releasing on the edge strip itself is a no-op: the user should
+        // aim at a real slot on the new page.
+        drag.cancelDwell()
+        return false
     }
 }
