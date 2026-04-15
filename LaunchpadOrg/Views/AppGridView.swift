@@ -35,28 +35,46 @@ struct AppGridView: View {
         // how SwiftUI negotiates proposals upstream.
         let rowSpacing: CGFloat = 18
         let colSpacing: CGFloat = 12
-        let gridWidth = CGFloat(cols) * slotWidth + CGFloat(max(cols - 1, 0)) * colSpacing
-        // Build the row layout as a concrete nested array — `[RowModel]`
-        // where each row already carries its own `[CellModel]` with cols
-        // entries (real nodes padded with nils). This avoids ForEach-over-
-        // index-range pitfalls during fullscreen-transition size flux, where
-        // cols and nodes.count were sometimes out of phase across passes.
-        let rows = Self.buildRows(nodes: nodes, cols: cols)
-        VStack(alignment: .leading, spacing: rowSpacing) {
-            ForEach(rows) { row in
-                HStack(spacing: colSpacing) {
-                    ForEach(row.cells) { cell in
-                        cellView(cell: cell, idToRealIndex: idToRealIndex)
-                            .frame(width: slotWidth, height: iconSize + 28)
-                    }
-                }
-                .frame(width: gridWidth, alignment: .leading)
+        let cellHeight = iconSize + 28
+        let c = max(cols, 1)
+        let rowCount = max(Int(ceil(Double(nodes.count) / Double(c))), 1)
+        let gridWidth = CGFloat(c) * slotWidth + CGFloat(max(c - 1, 0)) * colSpacing
+        let gridHeight = CGFloat(rowCount) * cellHeight + CGFloat(max(rowCount - 1, 0)) * rowSpacing
+        // Absolute-positioned layout. SwiftUI's VStack-of-HStacks was
+        // producing inconsistent row widths under certain geometry-flux
+        // conditions (rows past the first couple rendering fewer cells
+        // than cols). ZStack + explicit .offset is fully deterministic —
+        // every cell's position is a pure function of (row, col, slotWidth,
+        // spacing), with no layout negotiation between rows.
+        let cells: [PositionedCell] = nodes.enumerated().map { idx, node in
+            let r = idx / c
+            let col = idx % c
+            let x = CGFloat(col) * (slotWidth + colSpacing)
+            let y = CGFloat(r) * (cellHeight + rowSpacing)
+            return PositionedCell(id: node.id, node: node, x: x, y: y)
+        }
+        ZStack(alignment: .topLeading) {
+            // Transparent sizer so the ZStack reserves the full grid box.
+            Color.clear.frame(width: gridWidth, height: gridHeight)
+            ForEach(cells) { cell in
+                slotView(node: cell.node, realIndex: idToRealIndex[cell.node.id] ?? 0)
+                    .opacity(drag.source == (idToRealIndex[cell.node.id] ?? -1) ? 0.22 : 1)
+                    .scaleEffect(scaleFor(idToRealIndex[cell.node.id] ?? -1))
+                    .onDrop(
+                        of: [UTType.text],
+                        delegate: FastDropDelegate(
+                            store: store,
+                            drag: drag,
+                            targetRealIndex: idToRealIndex[cell.node.id] ?? 0,
+                            cellWidth: slotWidth,
+                            onCreateFolder: onCreateFolder
+                        )
+                    )
+                    .frame(width: slotWidth, height: cellHeight)
+                    .offset(x: cell.x, y: cell.y)
             }
         }
-        // Pin the VStack to the exact grid width and left-align it within
-        // any larger parent — prevents SwiftUI from squeezing cols in a
-        // narrow proposal and lets a partial last row hug the left edge.
-        .frame(width: gridWidth, alignment: .leading)
+        .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)
         .frame(maxWidth: .infinity, alignment: .leading)
         // Animate reflow + hover highlights at the grid level so there's one
         // animation driver per page rather than one per cell.
@@ -66,60 +84,14 @@ struct AppGridView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    @ViewBuilder
-    private func cellView(cell: CellModel, idToRealIndex: [UUID: Int]) -> some View {
-        if let node = cell.node {
-            let real = idToRealIndex[node.id] ?? 0
-            slotView(node: node, realIndex: real)
-                .opacity(drag.source == real ? 0.22 : 1)
-                .scaleEffect(scaleFor(real))
-                .onDrop(
-                    of: [UTType.text],
-                    delegate: FastDropDelegate(
-                        store: store,
-                        drag: drag,
-                        targetRealIndex: real,
-                        cellWidth: slotWidth,
-                        onCreateFolder: onCreateFolder
-                    )
-                )
-        } else {
-            // Empty trailing cells on a partial last row — take up the slot
-            // so the row doesn't stretch to fill the page width.
-            Color.clear
-        }
-    }
-
-    /// One cell slot — carries either a real node or nil (padding on the
-    /// last partial row). The stable `id` combines row+col so SwiftUI
-    /// treats each slot as its own identity and can't recycle a row's
-    /// cells across renders with mismatched cols.
-    struct CellModel: Identifiable {
-        let id: String
-        let node: LayoutNode?
-    }
-
-    struct RowModel: Identifiable {
-        let id: Int
-        let cells: [CellModel]
-    }
-
-    private static func buildRows(nodes: [LayoutNode], cols: Int) -> [RowModel] {
-        let c = max(cols, 1)
-        let rowCount = max(Int(ceil(Double(nodes.count) / Double(c))), nodes.isEmpty ? 0 : 1)
-        var rows: [RowModel] = []
-        rows.reserveCapacity(rowCount)
-        for r in 0 ..< rowCount {
-            var cells: [CellModel] = []
-            cells.reserveCapacity(c)
-            for col in 0 ..< c {
-                let i = r * c + col
-                let node: LayoutNode? = (i < nodes.count) ? nodes[i] : nil
-                cells.append(CellModel(id: "\(r)-\(col)", node: node))
-            }
-            rows.append(RowModel(id: r, cells: cells))
-        }
-        return rows
+    /// One laid-out cell. The id is the node's UUID so SwiftUI can
+    /// identity-match across renders (enabling smooth reflow animation
+    /// when positions change).
+    struct PositionedCell: Identifiable {
+        let id: UUID
+        let node: LayoutNode
+        let x: CGFloat
+        let y: CGFloat
     }
 
     private static func buildIndexMap(_ flat: [LayoutNode]) -> [UUID: Int] {
