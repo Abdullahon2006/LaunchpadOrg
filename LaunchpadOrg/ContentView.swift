@@ -139,6 +139,9 @@ struct ContentView: View {
                 if !newValue.isEmpty { searchFocused = true }
             }
             .focusable()
+            // Suppress the blue focus ring — we need focus for key-press
+            // capture, but the ring around the whole window is ugly.
+            .focusEffectDisabled()
             .onKeyPress(.escape) {
                 if !query.isEmpty {
                     query = ""
@@ -264,7 +267,7 @@ struct ContentView: View {
         // children during geometry-flux renders (fullscreen transitions).
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .offset(x: -CGFloat(clamped) * pageW + dragOffsetX)
-        .animation(.spring(response: 0.28, dampingFraction: 0.9), value: clamped)
+        .animation(.spring(response: 0.38, dampingFraction: 1.0), value: clamped)
         // Single clip frame — windows the offset HStack to exactly one page.
         .frame(width: pageW, alignment: .topLeading)
         .clipped()
@@ -359,7 +362,7 @@ struct ContentView: View {
             }
             // Snappier, critically-damped snap — settles in ~0.25 s with
             // no perceptible overshoot.
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+            withAnimation(.spring(response: 0.38, dampingFraction: 1.0)) {
                 selectedPage = newPage
                 dragOffsetX = 0
             }
