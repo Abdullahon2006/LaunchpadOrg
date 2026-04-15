@@ -14,9 +14,6 @@ struct AppGridView: View {
     /// report for drop targets is the item's index in the real store (not
     /// its visual position).
     let baseFlatIndex: Int
-    /// Precomputed id → real flat index, built once per render by the parent
-    /// so each slot doesn't have to scan `store.flatNodes` itself.
-    let idToRealIndex: [UUID: Int]
     let cols: Int
     let rows: Int
     let iconSize: CGFloat
@@ -26,7 +23,19 @@ struct AppGridView: View {
     var onCreateFolder: (AppFolder) -> Void
 
     var body: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: cols)
+        // Fixed-width columns keep the layout deterministic — `.flexible()`
+        // with an ambiguous width proposal was causing rows 3+ to collapse
+        // to half-width. `slotWidth` already accounts for spacing upstream.
+        let columns = Array(
+            repeating: GridItem(.flexible(minimum: 40, maximum: .infinity),
+                                spacing: 12),
+            count: cols
+        )
+        // Build id → real flat index once per page render. Computing it here
+        // (vs. passing it in as a prop) keeps AppGridView's inputs stable
+        // during swipes — otherwise the dict is a fresh instance every
+        // scroll frame and SwiftUI re-renders every slot for nothing.
+        let idToRealIndex = Self.buildIndexMap(store.flatNodes)
         // Hoist the identity fingerprint outside the ForEach — otherwise
         // every slot recomputes the full id list, which is O(n²) per render.
         let identityKey = nodes.map(\.id)
@@ -55,11 +64,18 @@ struct AppGridView: View {
         .animation(.interpolatingSpring(stiffness: 420, damping: 34), value: identityKey)
         .animation(.easeOut(duration: 0.12), value: drag.hoverTarget)
         .animation(.easeOut(duration: 0.15), value: drag.willCreateFolder)
-        // Fill the page width first (so LazyVGrid gets a proper wide proposal
-        // and uses all `cols` columns), then top-align vertically — short /
-        // incomplete pages hug the top edge instead of centering.
-        .frame(maxWidth: .infinity)
+        // Only add vertical slack so short / incomplete pages hug the top.
+        // Do NOT wrap with `.frame(maxWidth: .infinity)` — that proposes an
+        // infinite width to LazyVGrid and flexible columns collapse past
+        // the first couple of rows.
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private static func buildIndexMap(_ flat: [LayoutNode]) -> [UUID: Int] {
+        var map: [UUID: Int] = [:]
+        map.reserveCapacity(flat.count)
+        for (i, node) in flat.enumerated() { map[node.id] = i }
+        return map
     }
 
     private func scaleFor(_ real: Int) -> CGFloat {
