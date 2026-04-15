@@ -12,8 +12,11 @@ struct AppGridView: View {
     /// Each slot's flat index is `baseFlatIndex + localIndex` — BUT during
     /// a drag the UI is rendering a *virtual* order, so the flat index we
     /// report for drop targets is the item's index in the real store (not
-    /// its visual position). See `realIndex(of:)` below.
+    /// its visual position).
     let baseFlatIndex: Int
+    /// Precomputed id → real flat index, built once per render by the parent
+    /// so each slot doesn't have to scan `store.flatNodes` itself.
+    let idToRealIndex: [UUID: Int]
     let cols: Int
     let rows: Int
     let iconSize: CGFloat
@@ -24,16 +27,16 @@ struct AppGridView: View {
 
     var body: some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: cols)
-        LazyVGrid(columns: columns, spacing: 18) {
+        // Hoist the identity fingerprint outside the ForEach — otherwise
+        // every slot recomputes the full id list, which is O(n²) per render.
+        let identityKey = nodes.map(\.id)
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
             ForEach(nodes, id: \.id) { node in
-                let real = store.flatNodes.firstIndex { $0.id == node.id } ?? 0
+                let real = idToRealIndex[node.id] ?? 0
                 slotView(node: node, realIndex: real)
                     .frame(height: iconSize + 28)
                     .opacity(drag.source == real ? 0.22 : 1)
                     .scaleEffect(scaleFor(real))
-                    .animation(.spring(response: 0.32, dampingFraction: 0.78), value: nodes.map(\.id))
-                    .animation(.easeOut(duration: 0.15), value: drag.hoverTarget)
-                    .animation(.easeOut(duration: 0.2), value: drag.willCreateFolder)
                     .onDrop(
                         of: [UTType.text],
                         delegate: FastDropDelegate(
@@ -46,6 +49,14 @@ struct AppGridView: View {
                     )
             }
         }
+        // Animate reflow + hover highlights at the grid level so there's one
+        // animation driver per page rather than one per cell.
+        .animation(.spring(response: 0.32, dampingFraction: 0.78), value: identityKey)
+        .animation(.easeOut(duration: 0.15), value: drag.hoverTarget)
+        .animation(.easeOut(duration: 0.2), value: drag.willCreateFolder)
+        // Short / incomplete pages should hug the top-left rather than
+        // centering the grid in the page frame.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func scaleFor(_ real: Int) -> CGFloat {
@@ -127,12 +138,13 @@ struct FastDropDelegate: DropDelegate {
 
     private func updateZone(info: DropInfo) {
         let z = zone(for: info)
-        drag.dropZone = z
-        // "Will create folder" = merging onto a different slot. For folder
-        // targets this means "will add to folder"; for app targets, "will
-        // make a new folder". Either way the highlight ring is the right cue.
+        // Only write when the value actually changes — Observation fires a
+        // re-render on every mutation, and `dropUpdated` runs on every
+        // mouse-move tick. Guarding here keeps the frame rate up.
+        if drag.dropZone != z { drag.dropZone = z }
         let differentSlot = drag.source != targetRealIndex
-        drag.willCreateFolder = (z == .merge) && differentSlot
+        let willFolder = (z == .merge) && differentSlot
+        if drag.willCreateFolder != willFolder { drag.willCreateFolder = willFolder }
     }
 
     func performDrop(info: DropInfo) -> Bool {

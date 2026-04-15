@@ -154,6 +154,15 @@ struct ContentView: View {
         let clamped = min(max(selectedPage, 0), pageCount - 1)
         let pageW = max(1, width - horizontalMargin * 2)
 
+        // Build id → real flat index once per render so slot views don't have
+        // to scan `store.flatNodes` individually (was O(n) per slot, O(n²) per
+        // frame — shows up as stutter at 300+ apps).
+        var idToReal: [UUID: Int] = [:]
+        idToReal.reserveCapacity(store.flatNodes.count)
+        for (i, node) in store.flatNodes.enumerated() {
+            idToReal[node.id] = i
+        }
+
         return HStack(spacing: 0) {
             ForEach(0 ..< pageCount, id: \.self) { idx in
                 let start = idx * pageSize
@@ -162,6 +171,7 @@ struct ContentView: View {
                 AppGridView(
                     nodes: slice,
                     baseFlatIndex: start,
+                    idToRealIndex: idToReal,
                     cols: cols,
                     rows: rows,
                     iconSize: iconSize,
@@ -179,10 +189,11 @@ struct ContentView: View {
                         }
                     }
                 )
-                .frame(width: pageW)
+                .frame(width: pageW, alignment: .topLeading)
             }
         }
-        .frame(width: pageW, alignment: .leading)
+        .frame(width: pageW)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
         .offset(x: -CGFloat(clamped) * pageW + dragOffsetX)
         .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.88), value: clamped)
         // Clip *inside* the margin so adjacent pages can't bleed into it
