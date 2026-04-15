@@ -36,17 +36,31 @@ struct AppGridView: View {
         let rowSpacing: CGFloat = 18
         let colSpacing: CGFloat = 12
         let rowCount = Int(ceil(Double(nodes.count) / Double(max(cols, 1))))
+        let gridWidth = CGFloat(cols) * slotWidth + CGFloat(max(cols - 1, 0)) * colSpacing
+        // Materialize the ranges into Arrays — SwiftUI's `ForEach(0..<N)`
+        // initializer assumes a compile-time-constant range, and silently
+        // misbehaves when N is runtime-variable (stale cached count → some
+        // rows short of their full column count). `Array(...)` forces the
+        // id-based initializer, which handles runtime sizes correctly.
+        let rowIndices = Array(0 ..< rowCount)
+        let colIndices = Array(0 ..< cols)
         VStack(alignment: .leading, spacing: rowSpacing) {
-            ForEach(0 ..< rowCount, id: \.self) { row in
+            ForEach(rowIndices, id: \.self) { row in
                 HStack(spacing: colSpacing) {
-                    ForEach(0 ..< cols, id: \.self) { col in
+                    ForEach(colIndices, id: \.self) { col in
                         let localIdx = row * cols + col
                         cellView(localIdx: localIdx, idToRealIndex: idToRealIndex)
                             .frame(width: slotWidth, height: iconSize + 28)
                     }
                 }
+                .frame(width: gridWidth, alignment: .leading)
             }
         }
+        // Pin the VStack to the exact grid width and left-align it within
+        // any larger parent — prevents SwiftUI from squeezing cols in a
+        // narrow proposal and lets a partial last row hug the left edge.
+        .frame(width: gridWidth, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         // Animate reflow + hover highlights at the grid level so there's one
         // animation driver per page rather than one per cell.
         .animation(.interpolatingSpring(stiffness: 420, damping: 34), value: identityKey)

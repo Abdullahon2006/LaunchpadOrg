@@ -248,7 +248,7 @@ struct ContentView: View {
         .frame(width: pageW)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .offset(x: -CGFloat(clamped) * pageW + dragOffsetX)
-        .animation(.spring(response: 0.42, dampingFraction: 0.9), value: clamped)
+        .animation(.spring(response: 0.28, dampingFraction: 0.9), value: clamped)
         // Clip *inside* the margin so adjacent pages can't bleed into it
         // while swiping. Must come before the outer `.padding` so clipping
         // happens on the page-wide region, not the padded region.
@@ -337,13 +337,15 @@ struct ContentView: View {
             // width) commits the flip. Paired with the snap spring below,
             // the feel is "let go and it decides" rather than "drag all
             // the way across".
-            let threshold = pageW / 12
+            let threshold = pageW / 16
             if dragOffsetX < -threshold, selectedPage < pageCount - 1 {
                 newPage += 1
             } else if dragOffsetX > threshold, selectedPage > 0 {
                 newPage -= 1
             }
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
+            // Snappier, critically-damped snap — settles in ~0.25 s with
+            // no perceptible overshoot.
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
                 selectedPage = newPage
                 dragOffsetX = 0
             }
